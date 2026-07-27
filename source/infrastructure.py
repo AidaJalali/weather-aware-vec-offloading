@@ -41,19 +41,30 @@ class FogNode:
 
 @dataclass(frozen=True)
 class ExecutionModel:
-    local_energy_rate: float = 1.00
     local_speedup: float = 1.00
     fog_speedup: float = 2.50
     fog_bandwidth: float = 8.00
     fog_distance_delay_factor: float = 0.002
     fog_base_packet_loss_percent: float = 2.00
-    fog_tx_energy_rate: float = 0.70
-    fog_execution_energy_rate: float = 0.30
+    fog_active_power: float = 2.00
     cloud_speedup: float = 5.00
     cloud_bandwidth: float = 4.00
     cloud_backhaul_delay: float = 1.50
+    cloud_load_delay_per_task: float = 0.03
+    cloud_max_load_delay: float = 1.50
     cloud_base_packet_loss_percent: float = 5.00
-    cloud_tx_energy_rate: float = 1.20
+    cloud_active_power: float = 4.00
+    vehicle_tx_power: float = 1.20
+    max_retransmissions: int = 2
+    retransmission_timeout: float = 1.00
+
+
+WEATHER_BACKHAUL_DELAY = {
+    "BASE": 0.00,
+    "RAIN": 0.20,
+    "SNOW": 0.30,
+    "FOG": 0.50,
+}
 
 
 DEFAULT_FOG_NODES = (
@@ -72,6 +83,19 @@ def nearest_fog(vehicle: VehicleState, fog_nodes=DEFAULT_FOG_NODES) -> FogNode:
         fog_nodes,
         key=lambda fog: distance(vehicle.x, vehicle.y, fog.x, fog.y),
     )
+
+
+def dynamic_backhaul_delay(
+    scenario: str,
+    network_load: int,
+    model: ExecutionModel,
+) -> float:
+    weather_delay = WEATHER_BACKHAUL_DELAY.get(scenario, 0.0)
+    load_delay = min(
+        max(network_load, 0) * model.cloud_load_delay_per_task,
+        model.cloud_max_load_delay,
+    )
+    return model.cloud_backhaul_delay + weather_delay + load_delay
 
 
 def load_vehicle_states(path: str | Path) -> dict[tuple[float, str], VehicleState]:
@@ -115,4 +139,3 @@ def load_tasks(path: str | Path) -> list[TaskRecord]:
                 )
             )
     return tasks
-

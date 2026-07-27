@@ -31,19 +31,31 @@ def summarize_by_scenario(rows: list[dict]) -> dict[str, dict[str, float]]:
                 "packet_losses": 0,
                 "avg_latency": 0.0,
                 "avg_energy": 0.0,
+                "avg_vehicle_energy": 0.0,
+                "avg_infrastructure_energy": 0.0,
+                "avg_total_system_energy": 0.0,
             }
             continue
 
         deadline_misses = sum(row["deadline_missed"] == "True" for row in items)
         packet_losses = sum(row["packet_lost"] == "True" for row in items)
         avg_latency = sum(float(row["latency"]) for row in items) / total
-        avg_energy = sum(float(row["energy"]) for row in items) / total
+        avg_vehicle_energy = sum(float(row["vehicle_energy"]) for row in items) / total
+        avg_infrastructure_energy = (
+            sum(float(row["infrastructure_energy"]) for row in items) / total
+        )
+        avg_total_system_energy = (
+            sum(float(row["total_system_energy"]) for row in items) / total
+        )
         summary[scenario] = {
             "total_tasks": total,
             "deadline_misses": deadline_misses,
             "packet_losses": packet_losses,
             "avg_latency": avg_latency,
-            "avg_energy": avg_energy,
+            "avg_energy": avg_vehicle_energy,
+            "avg_vehicle_energy": avg_vehicle_energy,
+            "avg_infrastructure_energy": avg_infrastructure_energy,
+            "avg_total_system_energy": avg_total_system_energy,
         }
     return summary
 
@@ -61,6 +73,9 @@ def write_summary(summary: dict[str, dict[str, float]], output_file: str | Path)
                 "packet_losses",
                 "avg_latency",
                 "avg_energy",
+                "avg_vehicle_energy",
+                "avg_infrastructure_energy",
+                "avg_total_system_energy",
             ],
         )
         writer.writeheader()
@@ -149,4 +164,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
