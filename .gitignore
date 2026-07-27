@@ -45,3 +45,7 @@ pip-delete-this-directory.txt
 *.pkl
 output/
 results/
+
+# Local reference material and project notes
+Extra/
+Project_session/
