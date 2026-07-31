@@ -92,16 +92,37 @@ class DatasetWriter:
         vehicles_path.parent.mkdir(parents=True, exist_ok=True)
         tasks_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._write_vehicles_xml(
-            vehicles_path,
-            [ts for ts in self._vehicle_buffer
-             if ts.simulation_time // cfg.chunk_size == chunk_index],
-        )
-        self._write_tasks_xml(
-            tasks_path,
-            [ts for ts in self._task_buffer
-             if ts.simulation_time // cfg.chunk_size == chunk_index],
-        )
+        # Clean stale chunks from a previous longer run
+        if cfg.overwrite and chunk_index == 0:
+            for pattern, dir_path in [
+                ("chunk_*.xml", self._vehicles_dir(cfg.output_dir)),
+                ("chunk_*.xml", self._tasks_dir(cfg.output_dir)),
+            ]:
+                if dir_path.exists():
+                    for stale in dir_path.glob(pattern):
+                        stale.unlink()
+
+        # Write atomically: temp file first, then replace
+        vehicles_tmp = vehicles_path.with_suffix(".xml.tmp")
+        tasks_tmp = tasks_path.with_suffix(".xml.tmp")
+        try:
+            self._write_vehicles_xml(
+                vehicles_tmp,
+                [ts for ts in self._vehicle_buffer
+                 if ts.simulation_time // cfg.chunk_size == chunk_index],
+            )
+            self._write_tasks_xml(
+                tasks_tmp,
+                [ts for ts in self._task_buffer
+                 if ts.simulation_time // cfg.chunk_size == chunk_index],
+            )
+            vehicles_tmp.replace(vehicles_path)
+            tasks_tmp.replace(tasks_path)
+        except Exception:
+            # Clean up temp files on failure
+            vehicles_tmp.unlink(missing_ok=True)
+            tasks_tmp.unlink(missing_ok=True)
+            raise
 
         self._vehicle_buffer = [
             ts for ts in self._vehicle_buffer

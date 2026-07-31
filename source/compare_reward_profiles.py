@@ -166,6 +166,10 @@ def write_comparison(
         writer.writerows(asdict(row) for row in rows)
 
 
+_SOURCE_DIR = Path(__file__).resolve().parent
+_DEFAULT_DATA = _SOURCE_DIR / "data" / "sumo"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -175,11 +179,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--tasks",
-        default="source/data/sumo/tasks/chunk_0.xml",
+        default=str(_DEFAULT_DATA / "tasks" / "chunk_0.xml"),
     )
     parser.add_argument(
         "--vehicles",
-        default="source/data/sumo/vehicles/chunk_0.xml",
+        default=str(_DEFAULT_DATA / "vehicles" / "chunk_0.xml"),
     )
     parser.add_argument(
         "--target",
@@ -190,7 +194,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--output",
-        default="source/data/sumo/results/reward_profile_comparison.csv",
+        default=str(_DEFAULT_DATA / "results" / "reward_profile_comparison.csv"),
     )
     args = parser.parse_args()
 

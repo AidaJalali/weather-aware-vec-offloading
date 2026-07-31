@@ -236,12 +236,22 @@ def simulate_task(
     )
 
 
+_SOURCE_DIR = Path(__file__).resolve().parent
+_DEFAULT_DATA = _SOURCE_DIR / "data" / "sumo"
+
+
 def run_random_baseline(
-    vehicles_file: str | Path = "data/sumo/vehicles/chunk_0.xml",
-    tasks_file: str | Path = "data/sumo/tasks/chunk_0.xml",
-    output_file: str | Path = "data/sumo/results/random_baseline_results.csv",
+    vehicles_file: str | Path | None = None,
+    tasks_file: str | Path | None = None,
+    output_file: str | Path | None = None,
     seed: int = 42,
 ) -> list[SimulationResult]:
+    if vehicles_file is None:
+        vehicles_file = _DEFAULT_DATA / "vehicles" / "chunk_0.xml"
+    if tasks_file is None:
+        tasks_file = _DEFAULT_DATA / "tasks" / "chunk_0.xml"
+    if output_file is None:
+        output_file = _DEFAULT_DATA / "results" / "random_baseline_results.csv"
     vehicle_states = load_vehicle_states(vehicles_file)
     tasks = load_tasks(tasks_file)
     offloader = RandomOffloader(seed=seed)
@@ -302,9 +312,12 @@ def write_results(results: list[SimulationResult], output_file: str | Path) -> N
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--vehicles", default="data/sumo/vehicles/chunk_0.xml")
-    parser.add_argument("--tasks", default="data/sumo/tasks/chunk_0.xml")
-    parser.add_argument("--output", default="data/sumo/results/random_baseline_results.csv")
+    parser.add_argument(
+        "--vehicles", default=str(_DEFAULT_DATA / "vehicles" / "chunk_0.xml"))
+    parser.add_argument(
+        "--tasks", default=str(_DEFAULT_DATA / "tasks" / "chunk_0.xml"))
+    parser.add_argument(
+        "--output", default=str(_DEFAULT_DATA / "results" / "random_baseline_results.csv"))
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 

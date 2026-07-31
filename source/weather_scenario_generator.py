@@ -18,9 +18,9 @@ DEFAULT_ORDER = (
 def default_blocks_for_duration(duration: int):
     block_size = max(1, duration // len(DEFAULT_ORDER))
     blocks = []
-    start = 0
+    start = 1  # SUMO simulation timesteps start at 1
     for index, scenario in enumerate(DEFAULT_ORDER):
-        end = duration - 1 if index == len(DEFAULT_ORDER) - 1 else start + block_size - 1
+        end = duration if index == len(DEFAULT_ORDER) - 1 else start + block_size - 1
         blocks.append((start, end, scenario))
         start = end + 1
     return tuple(blocks)
@@ -40,7 +40,7 @@ def generate_weather_schedule(
         if blocks is None:
             blocks = default_blocks_for_duration(duration)
 
-        for t in range(duration):
+        for t in range(1, duration + 1):
             scenario = WeatherScenario.BASE
             for start, end, block_scenario in blocks:
                 if start <= t <= end:

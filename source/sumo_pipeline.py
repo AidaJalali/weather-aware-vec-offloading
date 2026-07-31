@@ -46,8 +46,6 @@ class SumoPipelineConfig:
     sumo_step_length: float = 1.0
 
 
-# ---- network & routes -------------------------------------------------------
-
 def _generate_network(output_file: Path, grid_number: int, grid_length: float) -> None:
     netgenerate_bin = sumolib.checkBinary("netgenerate")
     subprocess.run(
@@ -158,8 +156,6 @@ def _generate_routes_xml(
     routes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# ---- weather -----------------------------------------------------------------
-
 @dataclass
 class _WeatherState:
     scenario: WeatherScenario = WeatherScenario.BASE
@@ -190,8 +186,6 @@ def _apply_weather_to_sumo(weather: _WeatherState, config: SumoPipelineConfig) -
         pass
 
 
-# ---- vehicle I/O -------------------------------------------------------------
-
 def _read_vehicle_records(weather_scenario: str) -> list[VehicleRecord]:
     records: list[VehicleRecord] = []
     for vid in traci.vehicle.getIDList():
@@ -215,8 +209,6 @@ def _count_per_lane(records: list[VehicleRecord]) -> dict[str, int]:
         counts[r.lane] = counts.get(r.lane, 0) + 1
     return counts
 
-
-# ---- main loop ---------------------------------------------------------------
 
 def _run_simulation(config: SumoPipelineConfig) -> None:
     rng = random.Random(config.seed)
@@ -274,7 +266,7 @@ def _run_simulation(config: SumoPipelineConfig) -> None:
 
             all_tasks: list[Task] = []
             for rec in all_records:
-                if not rec.id.startswith("PKW_"):
+                if rec.vehicle_type != "PKW_special":
                     continue
                 lane_count = lane_counts.get(rec.lane, 0)
                 tasks = task_gen.generate_for_vehicle(
@@ -300,8 +292,6 @@ def _run_simulation(config: SumoPipelineConfig) -> None:
     if not keep and tmp_dir:
         shutil.rmtree(work_dir, ignore_errors=True)
 
-
-# ---- CLI ---------------------------------------------------------------------
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
