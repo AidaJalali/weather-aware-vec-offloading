@@ -45,6 +45,7 @@ pip-delete-this-directory.txt
 *.pkl
 output/
 results/
+source/data/sumo/
 
 # Local reference material and project notes
 Extra/

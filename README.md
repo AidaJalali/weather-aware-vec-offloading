@@ -2,60 +2,51 @@
 
 Weather-aware adaptive task offloading in Vehicular Edge Computing (VEC) using Soft Actor-Critic (SAC) deep reinforcement learning.
 
-## Overview
+## Quick start
 
-Vehicular Edge Computing (VEC) is a three-layer distributed computing architecture designed to meet the real-time processing and communication demands of vehicular networks. Instead of sending all data to a central cloud, VEC brings computation to the edge of the network — close to the data source (the vehicles).
+```bash
+# Create environment and install dependencies
+uv venv .venv
+uv pip install --python .venv/bin/python -r dependencies/requirements.txt
 
-Existing task offloading algorithms for VEC often assume ideal conditions and ignore critical real-world dynamics such as **weather conditions**. Adverse weather (rain, snow, fog) directly affects:
+# Run the full Phase 1 pipeline (120-second SUMO simulation)
+PYTHONPATH=source .venv/bin/python source/run_phase1_pipeline.py --duration 120
 
-- **Vehicle dynamics** (reduced speed, altered mobility patterns)
-- **Task characteristics** (increased processing load, tighter deadlines)
-- **Communication channel quality** (signal attenuation, higher packet loss)
+# Run tests
+PYTHONPATH=source .venv/bin/python -m unittest discover -s tests -v
+```
 
-A Zone Manager that is unaware of these changes makes suboptimal — and potentially unsafe — decisions, leading to increased latency, lower task success rates, and degraded reliability.
+## Data generation with SUMO
 
-This project tackles this problem by designing an **intelligent, weather-aware Zone Manager** that transforms the system from a purely performance-optimized model into a **reliable model** capable of adapting to unpredictable real-world conditions.
+Mobility data is generated using SUMO via TraCI. The pipeline creates a grid road
+network, simulates vehicle movement with realistic dynamics, applies weather effects
+inside the simulation, and generates offloading tasks.
 
-## Approach
+```bash
+# Generate a 120-second dataset
+PYTHONPATH=source .venv/bin/python source/sumo_pipeline.py \
+  --duration 120 \
+  --users 12 \
+  --mobile-fogs 3 \
+  --seed 42 \
+  --weather-schedule source/data/weather_scenarios.csv \
+  --output-dir source/data/sumo \
+  --overwrite
+```
 
-- **Algorithm:** Soft Actor-Critic (SAC) — a state-of-the-art off-policy deep reinforcement learning algorithm suitable for continuous action spaces
-- **Agent:** Zone Manager making dynamic task offloading decisions
-- **State Space:** Comprehensive representation including weather parameters, vehicle states, task properties, and network resource availability
-- **Reward Function:** Multi-objective design balancing **latency**, **energy consumption**, and **reliability** across diverse weather conditions
+Key modules:
 
-## Weather Scenarios
+| Module | Role |
+|--------|------|
+| `source/sumo_pipeline.py` | SUMO network, route generation, TraCI orchestration |
+| `source/task_generation.py` | Deterministic seeded task-parameter generation |
+| `source/xml_dataset_writer.py` | Chunk-buffered vehicle/task XML writer |
+| `source/weather_scenarios.py` | Weather scenario definitions and effects |
+| `source/weather_scenario_generator.py` | Weather schedule CSV generator |
 
-Five scenarios are evaluated:
-
-| Scenario | Max Speed | Deadline | Cycles/Bit | Task Rate | Signal Loss | PLR Increase |
-|----------|-----------|----------|------------|-----------|-------------|--------------|
-| **Base** | Vmax | Normal | C | R | PL | N |
-| **Rain** | -15% | Tight | 1.2–1.4x | +20% | +2–4 dB | +15–20% |
-| **Snow** | -30% | Tightest | 1.5–1.8x | -50% | +1–2 dB | +5–10% |
-| **Fog** | -60% | Relaxed | 1.3–1.6x | +25% | +4–6 dB | +25–30% |
-| **Mixed** | Varying | Varying | Varying | Varying | Varying | Varying |
-
-## Expected Outputs
-
-For each scenario, the following metrics are compared against baseline (non-weather-aware) algorithms:
-
-1. Average latency
-2. Average energy consumption
-3. Number of deadline misses
-4. Packet loss count
-
-## Project Phases
-
-### Phase 1 — System Model & Environment
-- Implement the VEC simulation environment
-- Model vehicles, edge nodes, communication channels, and task generation
-- Implement weather-specific parameter modifiers for all five scenarios
-
-### Phase 2 — Algorithm Implementation & Evaluation
-- Implement the SAC-based Zone Manager
-- Implement baseline (non-weather-aware) offloading algorithms
-- Run experiments across all five scenarios
-- Generate comparison graphs and analysis
+Output files are written to `source/data/sumo/` (git-ignored):
+- `vehicles/chunk_0.xml` — Vehicle state snapshots per timestep
+- `tasks/chunk_0.xml` — Generated task records per timestep
 
 ## Genetic fallback for Phase 2
 
@@ -118,8 +109,8 @@ Create the environment directly from generated XML:
 from vec_offloading_env import VECOffloadingEnv
 
 env = VECOffloadingEnv.from_xml(
-    tasks_file="source/data/tasks/chunk_0.xml",
-    vehicles_file="source/data/vehicles/chunk_0.xml",
+    tasks_file="source/data/sumo/tasks/chunk_0.xml",
+    vehicles_file="source/data/sumo/vehicles/chunk_0.xml",
 )
 observation, info = env.reset(seed=37)
 ```
@@ -148,10 +139,10 @@ samples:
 
 ```bash
 PYTHONPATH=source .venv/bin/python source/compare_reward_profiles.py \
-  --tasks source/data/tasks/chunk_0.xml \
-  --vehicles source/data/vehicles/chunk_0.xml \
+  --tasks source/data/sumo/tasks/chunk_0.xml \
+  --vehicles source/data/sumo/vehicles/chunk_0.xml \
   --target FOG \
-  --output source/data/results/reward_profile_comparison.csv
+  --output source/data/sumo/results/reward_profile_comparison.csv
 ```
 
 This controlled replay verifies how reward shaping changes evaluation. It does not
@@ -160,22 +151,14 @@ with fixed and adaptive rewards, then evaluate both models on common held-out se
 
 ## SUMO and TraCI setup
 
-Create the project environment and install the dependencies:
+Verify SUMO/TraCI connectivity:
 
 ```bash
-uv venv .venv
-uv pip install --python .venv/bin/python -r dependencies/requirements.txt
-```
-
-Verify that Python can start SUMO and read live vehicle state through TraCI:
-
-```bash
-PATH="$PWD/.venv/bin:$PATH" \
-  .venv/bin/python source/sumo_traci_smoke_test.py
+.venv/bin/python source/sumo_traci_smoke_test.py
 ```
 
 The test creates a temporary road network and vehicle, advances SUMO one step at a
-time, and prints the vehicle position and speed. It does not modify project data.
+time, and prints vehicle position and speed. It does not modify project data.
 
 ## Supervision
 

@@ -175,11 +175,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--tasks",
-        default="source/data/tasks/chunk_0.xml",
+        default="source/data/sumo/tasks/chunk_0.xml",
     )
     parser.add_argument(
         "--vehicles",
-        default="source/data/vehicles/chunk_0.xml",
+        default="source/data/sumo/vehicles/chunk_0.xml",
     )
     parser.add_argument(
         "--target",
@@ -187,10 +187,10 @@ def main() -> None:
         default="FOG",
         help="Use the same target for every task during reward comparison.",
     )
-    parser.add_argument("--seed", type=int, default=37)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--output",
-        default="source/data/results/reward_profile_comparison.csv",
+        default="source/data/sumo/results/reward_profile_comparison.csv",
     )
     args = parser.parse_args()
 

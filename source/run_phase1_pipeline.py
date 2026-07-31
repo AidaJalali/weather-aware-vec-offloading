@@ -1,84 +1,89 @@
+"""Phase 1 pipeline: SUMO mobility → task generation → random baseline → plots.
+
+Usage::
+
+    PYTHONPATH=source python source/run_phase1_pipeline.py --duration 120
+"""
+
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
-from mobility_generator import generate_mobility
-from plot_results import plot_all
-from random_baseline_simulator import run_random_baseline
-from task_and_user_generator import Config as TaskGenConfig
-from task_and_user_generator import Generator
+from sumo_pipeline import SumoPipelineConfig, _run_simulation
 from weather_scenario_generator import generate_weather_schedule
+from random_baseline_simulator import run_random_baseline
+from plot_results import plot_all
 
 
-def run_pipeline(
-    mobility_file: str,
-    weather_file: str,
-    duration: int,
-    generate_mobility_if_missing: bool = True,
-) -> None:
-    project_dir = Path(__file__).resolve().parent
-    os.chdir(project_dir)
+SOURCE_DIR = Path(__file__).resolve().parent
+DEFAULT_DATA_DIR = SOURCE_DIR / "data"
+DEFAULT_OUTPUT_DIR = DEFAULT_DATA_DIR / "sumo"
 
-    mobility_path = Path(mobility_file)
-    weather_path = Path(weather_file)
-    default_mobility = mobility_path == Path("data/raw_mobility.xml")
-    default_weather = weather_path == Path("data/weather_scenarios.csv")
 
-    if generate_mobility_if_missing and (default_mobility or not mobility_path.exists()):
-        generate_mobility(mobility_path, duration=duration)
+def run_pipeline(duration: int, seed: int, output_dir: Path) -> None:
+    """Generate data with SUMO, run random baseline, produce plots."""
+    weather_csv = DEFAULT_DATA_DIR / "weather_scenarios.csv"
 
-    if not mobility_path.exists():
+    # 1. Generate weather schedule
+    generate_weather_schedule(duration=duration, output_file=weather_csv)
+
+    # 2. Run SUMO pipeline
+    sumo_config = SumoPipelineConfig(
+        duration=duration,
+        seed=seed,
+        output_dir=output_dir,
+        weather_schedule=weather_csv,
+        overwrite=True,
+    )
+    _run_simulation(sumo_config)
+
+    # 3. Run random baseline on the first chunk
+    vehicles_file = output_dir / "vehicles" / "chunk_0.xml"
+    tasks_file = output_dir / "tasks" / "chunk_0.xml"
+
+    if not vehicles_file.exists() or not tasks_file.exists():
         raise FileNotFoundError(
-            f"Mobility file not found: {mobility_path}. "
-            "Provide a SUMO-style mobility XML or enable synthetic generation."
+            f"Expected generated data at {vehicles_file} and {tasks_file}. "
+            f"Check that the SUMO pipeline produced output."
         )
 
-    if default_weather or not weather_path.exists():
-        generate_weather_schedule(duration=duration, output_file=weather_path)
-
-    TaskGenConfig.WeatherScenarioConfig.SCENARIO_CSV = str(weather_path)
-    try:
-        TaskGenConfig.HardTaskConfig.TASKS = TaskGenConfig.HardTaskConfig.load_tasks()
-    except FileNotFoundError:
-        TaskGenConfig.HardTaskConfig.TASKS = ()
-
-    generator = Generator()
-    generator.generate_data(str(mobility_path))
-    generator.save_metrics_to_csv("./data/metrics.csv")
-    generator.plot_metrics("./data/metrics_visualization.png")
-
+    results_file = output_dir / "results" / "random_baseline_results.csv"
     run_random_baseline(
-        vehicles_file="./data/vehicles/chunk_0.xml",
-        tasks_file="./data/tasks/chunk_0.xml",
-        output_file="./data/results/random_baseline_results.csv",
+        vehicles_file=vehicles_file,
+        tasks_file=tasks_file,
+        output_file=results_file,
+        seed=seed,
     )
+
+    # 4. Generate plots
+    summary_file = output_dir / "results" / "random_baseline_summary.csv"
     plot_all(
-        results_file="./data/results/random_baseline_results.csv",
-        summary_file="./data/results/random_baseline_summary.csv",
-        output_dir="./data/results",
+        results_file=results_file,
+        summary_file=summary_file,
+        output_dir=output_dir / "results",
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Phase 1 pipeline: SUMO → tasks → baseline → plots"
+    )
     parser.add_argument("--duration", type=int, default=120)
-    parser.add_argument("--mobility", default="data/raw_mobility.xml")
-    parser.add_argument("--weather", default="data/weather_scenarios.csv")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--no-synthetic-mobility",
-        action="store_true",
-        help="Fail if the mobility file is missing instead of generating a tiny demo file.",
+        "--output-dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Directory for generated data and results.",
     )
     args = parser.parse_args()
 
     run_pipeline(
-        mobility_file=args.mobility,
-        weather_file=args.weather,
         duration=args.duration,
-        generate_mobility_if_missing=not args.no_synthetic_mobility,
+        seed=args.seed,
+        output_dir=Path(args.output_dir),
     )
+    print("Phase 1 pipeline complete.")
 
 
 if __name__ == "__main__":
