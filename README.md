@@ -22,15 +22,53 @@ Mobility data is generated using SUMO via TraCI. The pipeline creates a grid roa
 network, simulates vehicle movement with realistic dynamics, applies weather effects
 inside the simulation, and generates offloading tasks.
 
+### Quick: generate the full dataset
+
 ```bash
-# Generate a 120-second dataset
+# Generate all 31 training/validation datasets (3.9M tasks, ~25 min)
+PYTHONPATH=source .venv/bin/python scripts/generate_all_datasets.py
+```
+
+This produces:
+
+```
+source/data/sumo/
+├── train/
+│   ├── s42_u12_f3/        ┐
+│   ├── s123_u12_f3/       │ 10 mixed-weather seeds
+│   ├── ...                │ (BASE → RAIN → SNOW → FOG cycle)
+│   ├── s666_u12_f3/       ┘
+│   ├── weather_base_s100/ ┐
+│   ├── weather_rain_s100/ │ 12 per-weather datasets
+│   ├── weather_snow_s100/ │ (3 seeds × 4 weathers)
+│   ├── weather_fog_s100/  ┘
+│   ├── s42_u20_f5_h/      ┐
+│   ├── s123_u8_f2_l/      │ 4 density variants
+│   ├── s42_u30_f7_vh/     │ (5–30 users, 1–7 fogs)
+│   └── s123_u5_f1_vl/     ┘
+└── val/
+    ├── s999_u12_f3/        ← mixed-weather held-out
+    ├── weather_base_s999/  ┐
+    ├── weather_rain_s999/  │ per-weather held-out
+    ├── weather_snow_s999/  │
+    └── weather_fog_s999/   ┘
+```
+
+Each dataset contains `vehicles/chunk_0.xml.gz` and `tasks/chunk_0.xml.gz` (gzipped
+for git — 1.2GB → 111MB). Loaders in `infrastructure.py` read `.xml.gz` transparently:
+pass a `.xml` path and it auto-resolves to `.xml.gz` if found.
+
+### Single dataset
+
+```bash
+# Generate a 3600-second dataset with custom parameters
 PYTHONPATH=source .venv/bin/python source/sumo_pipeline.py \
-  --duration 120 \
+  --duration 3600 \
   --users 12 \
   --mobile-fogs 3 \
   --seed 42 \
   --weather-schedule source/data/weather_scenarios.csv \
-  --output-dir source/data/sumo \
+  --output-dir source/data/sumo/my_dataset \
   --overwrite
 ```
 
@@ -43,10 +81,7 @@ Key modules:
 | `source/xml_dataset_writer.py` | Chunk-buffered vehicle/task XML writer |
 | `source/weather_scenarios.py` | Weather scenario definitions and effects |
 | `source/weather_scenario_generator.py` | Weather schedule CSV generator |
-
-Output files are written to `source/data/sumo/` (git-ignored):
-- `vehicles/chunk_0.xml` — Vehicle state snapshots per timestep
-- `tasks/chunk_0.xml` — Generated task records per timestep
+| `scripts/generate_all_datasets.py` | Batch generation of all train/val datasets |
 
 ## Genetic fallback for Phase 2
 
