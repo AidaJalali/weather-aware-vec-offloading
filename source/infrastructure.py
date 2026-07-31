@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import math
 import xml.etree.ElementTree as Et
 from dataclasses import dataclass
@@ -98,8 +99,26 @@ def dynamic_backhaul_delay(
     return model.cloud_backhaul_delay + weather_delay + load_delay
 
 
+def _open_xml(path: str | Path) -> Et.ElementTree:
+    path = Path(path)
+    if path.suffix == ".gz":
+        with gzip.open(path, "rb") as fh:
+            return Et.ElementTree(Et.fromstring(fh.read()))
+    return Et.parse(path)
+
+
+def _resolve_path(path: str | Path) -> Path:
+    path = Path(path)
+    if not path.exists():
+        gz = path.with_suffix(path.suffix + ".gz")
+        if gz.exists():
+            return gz
+    return path
+
+
 def load_vehicle_states(path: str | Path) -> dict[tuple[float, str], VehicleState]:
-    root = Et.parse(path).getroot()
+    path = _resolve_path(path)
+    root = _open_xml(path).getroot()
     states: dict[tuple[float, str], VehicleState] = {}
     for timestep in root.findall(".//timestep"):
         time = float(timestep.get("time"))
@@ -117,7 +136,8 @@ def load_vehicle_states(path: str | Path) -> dict[tuple[float, str], VehicleStat
 
 
 def load_tasks(path: str | Path) -> list[TaskRecord]:
-    root = Et.parse(path).getroot()
+    path = _resolve_path(path)
+    root = _open_xml(path).getroot()
     tasks: list[TaskRecord] = []
     for timestep in root.findall(".//timestep"):
         release_time = float(timestep.get("time"))

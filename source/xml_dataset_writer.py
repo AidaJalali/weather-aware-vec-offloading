@@ -71,8 +71,12 @@ class DatasetWriter:
     def _tasks_dir(output_dir: Path) -> Path:
         return output_dir / "tasks"
 
+    @staticmethod
+    def _chunk_for(simulation_time: int, chunk_size: int) -> int:
+        return (simulation_time - 1) // chunk_size
+
     def _crosses_chunk_boundary(self, simulation_time: int) -> bool:
-        return simulation_time // self.config.chunk_size > self._current_chunk
+        return self._chunk_for(simulation_time, self.config.chunk_size) > self._current_chunk
 
     def _flush_chunk(self, chunk_index: int) -> None:
         cfg = self.config
@@ -109,12 +113,12 @@ class DatasetWriter:
             self._write_vehicles_xml(
                 vehicles_tmp,
                 [ts for ts in self._vehicle_buffer
-                 if ts.simulation_time // cfg.chunk_size == chunk_index],
+                 if self._chunk_for(ts.simulation_time, cfg.chunk_size) == chunk_index],
             )
             self._write_tasks_xml(
                 tasks_tmp,
                 [ts for ts in self._task_buffer
-                 if ts.simulation_time // cfg.chunk_size == chunk_index],
+                 if self._chunk_for(ts.simulation_time, cfg.chunk_size) == chunk_index],
             )
             vehicles_tmp.replace(vehicles_path)
             tasks_tmp.replace(tasks_path)
@@ -126,11 +130,11 @@ class DatasetWriter:
 
         self._vehicle_buffer = [
             ts for ts in self._vehicle_buffer
-            if ts.simulation_time // cfg.chunk_size > chunk_index
+            if self._chunk_for(ts.simulation_time, cfg.chunk_size) > chunk_index
         ]
         self._task_buffer = [
             ts for ts in self._task_buffer
-            if ts.simulation_time // cfg.chunk_size > chunk_index
+            if self._chunk_for(ts.simulation_time, cfg.chunk_size) > chunk_index
         ]
 
     @staticmethod

@@ -61,7 +61,7 @@ class DatasetWriterTests(unittest.TestCase):
         writer = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, overwrite=True,
         ))
-        for t in range(5):
+        for t in range(1, 6):
             v = self._make_vehicle("PKW_000", x=100.0 + t * 10)
             task = self._make_task_fallback("PKW_000", t)
             writer.add_timestep(t, [v], [task])
@@ -76,16 +76,16 @@ class DatasetWriterTests(unittest.TestCase):
         writer = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, overwrite=True,
         ))
-        task = self._make_task_fallback("PKW_999", 0)
+        task = self._make_task_fallback("PKW_999", 1)
         v = self._make_vehicle("PKW_000")  # Different vehicle
         with self.assertRaises(ValueError):
-            writer.add_timestep(0, [v], [task])
+            writer.add_timestep(1, [v], [task])
 
     def test_chunk_splitting(self) -> None:
         writer = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, chunk_size=10, overwrite=True,
         ))
-        for t in range(25):
+        for t in range(1, 26):
             v = self._make_vehicle(f"PKW_{t % 3:03d}", x=float(t * 10))
             writer.add_timestep(t, [v], [])
         writer.finish()
@@ -95,48 +95,48 @@ class DatasetWriterTests(unittest.TestCase):
         self.assertTrue((self.tmp / "vehicles" / "chunk_2.xml").exists())
         self.assertFalse((self.tmp / "vehicles" / "chunk_3.xml").exists())
 
-        # chunk_0: timesteps 0-9, chunk_1: 10-19, chunk_2: 20-24
+        # chunk_0: timesteps 1-10, chunk_1: 11-20, chunk_2: 21-25
         v0 = load_vehicle_states(self.tmp / "vehicles" / "chunk_0.xml")
         v1 = load_vehicle_states(self.tmp / "vehicles" / "chunk_1.xml")
         v2 = load_vehicle_states(self.tmp / "vehicles" / "chunk_2.xml")
         times0 = {int(t) for (t, _) in v0}
         times1 = {int(t) for (t, _) in v1}
         times2 = {int(t) for (t, _) in v2}
-        self.assertEqual(times0, set(range(10)))
-        self.assertEqual(times1, set(range(10, 20)))
-        self.assertEqual(times2, set(range(20, 25)))
+        self.assertEqual(times0, set(range(1, 11)))
+        self.assertEqual(times1, set(range(11, 21)))
+        self.assertEqual(times2, set(range(21, 26)))
 
     def test_overwrite_protection(self) -> None:
         writer = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, overwrite=False, chunk_size=2,
         ))
         v = self._make_vehicle("PKW_000")
-        writer.add_timestep(0, [v], [])
-        # Force a chunk flush by crossing the boundary
         writer.add_timestep(1, [v], [])
+        # Force a chunk flush by crossing the boundary
         writer.add_timestep(2, [v], [])
+        writer.add_timestep(3, [v], [])
         writer.finish()
 
         writer2 = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, overwrite=False, chunk_size=2,
         ))
         with self.assertRaises(FileExistsError):
-            writer2.add_timestep(0, [v], [])
             writer2.add_timestep(1, [v], [])
             writer2.add_timestep(2, [v], [])
+            writer2.add_timestep(3, [v], [])
 
     def test_final_partial_chunk_is_written(self) -> None:
         writer = DatasetWriter(DatasetWriterConfig(
             output_dir=self.tmp, chunk_size=3600, overwrite=True,
         ))
         v = self._make_vehicle("PKW_000")
-        for t in range(5):
+        for t in range(1, 6):
             writer.add_timestep(t, [v], [])
         writer.finish()
 
         chunk = load_vehicle_states(self.tmp / "vehicles" / "chunk_0.xml")
         times = {int(t) for (t, _) in chunk}
-        self.assertEqual(times, set(range(5)))
+        self.assertEqual(times, set(range(1, 6)))
 
     def test_lkw_vehicle_with_matching_task_is_allowed(self) -> None:
         """Writer allows any task whose creator matches a vehicle — filtering
@@ -149,9 +149,9 @@ class DatasetWriterTests(unittest.TestCase):
             lane="lane_0", vehicle_type="LKW_special",
             weather_scenario="BASE",
         )
-        task_lkw = self._make_task_fallback("LKW_000", 0)
+        task_lkw = self._make_task_fallback("LKW_000", 1)
         # Should NOT raise — creator matches a present vehicle
-        writer.add_timestep(0, [lkw], [task_lkw])
+        writer.add_timestep(1, [lkw], [task_lkw])
         writer.finish()
         tasks = load_tasks(self.tmp / "tasks" / "chunk_0.xml")
         self.assertEqual(len(tasks), 1)
