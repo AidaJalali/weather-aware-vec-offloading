@@ -40,7 +40,6 @@ pip-delete-this-directory.txt
 .pytest_cache/
 
 # Output data
-*.csv
 *.npz
 *.pkl
 output/
