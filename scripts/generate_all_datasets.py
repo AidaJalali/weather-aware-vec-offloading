@@ -12,9 +12,9 @@ from weather_scenario_generator import generate_weather_schedule
 from weather_scenarios import WeatherScenario
 
 PROJECT = Path(__file__).resolve().parent.parent
-SOURCE = PROJECT / "source"
+SOURCE = PROJECT / "src"
 SUMO_PIPELINE = SOURCE / "sumo_pipeline.py"
-DATA = SOURCE / "data" / "sumo"
+DATA = PROJECT / "data" / "sumo"
 ENV = {**os.environ, "PYTHONPATH": str(SOURCE)}
 
 

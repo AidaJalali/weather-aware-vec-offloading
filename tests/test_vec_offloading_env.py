@@ -67,6 +67,47 @@ class VECOffloadingEnvTests(unittest.TestCase):
             OffloadTarget.CLOUD,
         )
 
+    def test_observation_contains_weather_loss_queue_and_capacity_state(self) -> None:
+        first = TaskRecord(
+            **{
+                **make_task("first", scenario="RAIN").__dict__,
+                "plr_increase_percent": 15.0,
+            }
+        )
+        second = make_task("second", release_time=1.0, scenario="RAIN")
+        env = VECOffloadingEnv(
+            [first, second],
+            {
+                (0.0, "vehicle-1"): make_vehicle(scenario="RAIN"),
+                (1.0, "vehicle-1"): make_vehicle(
+                    time=1.0,
+                    scenario="RAIN",
+                ),
+            },
+        )
+
+        observation, _ = env.reset(seed=7)
+        fields = {
+            name: observation[index]
+            for index, name in enumerate(env.observation_fields)
+        }
+        self.assertEqual(fields["weather_base"], 0.0)
+        self.assertEqual(fields["weather_rain"], 1.0)
+        self.assertAlmostEqual(fields["fog_packet_loss_probability"], 0.17)
+        self.assertAlmostEqual(fields["cloud_packet_loss_probability"], 0.20)
+        self.assertEqual(fields["local_queue_occupancy"], 0.0)
+        self.assertEqual(fields["local_available_capacity"], 1.0)
+
+        next_observation = env.step(
+            np.array([-1.0], dtype=np.float32)
+        )[0]
+        next_fields = {
+            name: next_observation[index]
+            for index, name in enumerate(env.observation_fields)
+        }
+        self.assertEqual(next_fields["local_queue_occupancy"], 1.0)
+        self.assertEqual(next_fields["local_available_capacity"], 0.0)
+
     def test_local_step_uses_existing_execution_model(self) -> None:
         task = make_task("task")
         model = ExecutionModel(local_speedup=1.0)
@@ -207,6 +248,7 @@ class VECOffloadingEnvTests(unittest.TestCase):
         )
 
         env.reset(seed=123)
+        self.assertEqual(env._channel.seed, 123)
         first = env.step(np.array([0.0], dtype=np.float32))[4]
         env.reset(seed=123)
         second = env.step(np.array([0.0], dtype=np.float32))[4]
@@ -216,6 +258,8 @@ class VECOffloadingEnvTests(unittest.TestCase):
             first["transmission_attempts"],
             second["transmission_attempts"],
         )
+        self.assertIn("final_failure_probability", first)
+        self.assertIn("transmission_energy", first)
 
     def test_environment_passes_gymnasium_checker(self) -> None:
         tasks = [

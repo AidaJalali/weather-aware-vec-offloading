@@ -1,0 +1,51 @@
+{
+  "name": "test_fast_mix",
+  "category": "test",
+  "stage": "fast",
+  "blocks": [
+    {
+      "scenario": "RAIN",
+      "duration": 125,
+      "seed": 20057
+    },
+    {
+      "scenario": "FOG",
+      "duration": 125,
+      "seed": 20058
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 125,
+      "seed": 20059
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 125,
+      "seed": 20060
+    },
+    {
+      "scenario": "BASE",
+      "duration": 125,
+      "seed": 20061
+    },
+    {
+      "scenario": "FOG",
+      "duration": 125,
+      "seed": 20062
+    },
+    {
+      "scenario": "BASE",
+      "duration": 125,
+      "seed": 20063
+    },
+    {
+      "scenario": "RAIN",
+      "duration": 125,
+      "seed": 20064
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

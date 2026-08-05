@@ -1,0 +1,31 @@
+{
+  "name": "train_slow_mix_1",
+  "category": "train",
+  "stage": "slow",
+  "blocks": [
+    {
+      "scenario": "BASE",
+      "duration": 250,
+      "seed": 20009
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 250,
+      "seed": 20010
+    },
+    {
+      "scenario": "RAIN",
+      "duration": 250,
+      "seed": 20011
+    },
+    {
+      "scenario": "FOG",
+      "duration": 250,
+      "seed": 20012
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

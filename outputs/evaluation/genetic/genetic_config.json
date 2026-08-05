@@ -1,0 +1,19 @@
+{
+  "population_size": 32,
+  "max_generations": 25,
+  "time_limit_seconds": 0.15,
+  "tournament_size": 3,
+  "crossover_rate": 0.8,
+  "mutation_rate": 0.1,
+  "elite_count": 2,
+  "local_capacity": 1,
+  "fog_capacity": 4,
+  "cloud_capacity": 16,
+  "latency_weight": 0.3,
+  "energy_weight": 0.2,
+  "reliability_weight": 0.2,
+  "queue_weight": 0.1,
+  "deadline_miss_penalty": 100.0,
+  "lateness_penalty": 10.0,
+  "seed": 37
+}

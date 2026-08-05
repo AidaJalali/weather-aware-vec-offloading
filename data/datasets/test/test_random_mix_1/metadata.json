@@ -1,0 +1,46 @@
+{
+  "name": "test_random_mix_1",
+  "category": "test",
+  "stage": "random",
+  "blocks": [
+    {
+      "scenario": "RAIN",
+      "duration": 145,
+      "seed": 20101
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 118,
+      "seed": 20102
+    },
+    {
+      "scenario": "BASE",
+      "duration": 169,
+      "seed": 20103
+    },
+    {
+      "scenario": "FOG",
+      "duration": 130,
+      "seed": 20104
+    },
+    {
+      "scenario": "BASE",
+      "duration": 197,
+      "seed": 20105
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 138,
+      "seed": 20106
+    },
+    {
+      "scenario": "BASE",
+      "duration": 103,
+      "seed": 20107
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

@@ -1,0 +1,673 @@
+{
+  "datasets": {
+    "finetune_base": {
+      "name": "finetune_base",
+      "category": "finetune",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 1000,
+          "seed": 20069
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_base"
+    },
+    "finetune_rain": {
+      "name": "finetune_rain",
+      "category": "finetune",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 1000,
+          "seed": 20070
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_rain"
+    },
+    "finetune_snow": {
+      "name": "finetune_snow",
+      "category": "finetune",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 1000,
+          "seed": 20071
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_snow"
+    },
+    "finetune_fog": {
+      "name": "finetune_fog",
+      "category": "finetune",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 1000,
+          "seed": 20072
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_fog"
+    },
+    "finetune_slow_mix_1": {
+      "name": "finetune_slow_mix_1",
+      "category": "finetune",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20073
+        },
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20074
+        },
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20075
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20076
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_slow_mix_1"
+    },
+    "finetune_slow_mix_2": {
+      "name": "finetune_slow_mix_2",
+      "category": "finetune",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20077
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20078
+        },
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20079
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20080
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_slow_mix_2"
+    },
+    "finetune_fast_mix_1": {
+      "name": "finetune_fast_mix_1",
+      "category": "finetune",
+      "stage": "fast",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20081
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20082
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20083
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20084
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20085
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20086
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20087
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20088
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_fast_mix_1"
+    },
+    "finetune_fast_mix_2": {
+      "name": "finetune_fast_mix_2",
+      "category": "finetune",
+      "stage": "fast",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20089
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20090
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20091
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20092
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20093
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20094
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20095
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20096
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/finetune/finetune_fast_mix_2"
+    },
+    "test_base": {
+      "name": "test_base",
+      "category": "test",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 1000,
+          "seed": 20097
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_base"
+    },
+    "test_rain": {
+      "name": "test_rain",
+      "category": "test",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 1000,
+          "seed": 20098
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_rain"
+    },
+    "test_snow": {
+      "name": "test_snow",
+      "category": "test",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 1000,
+          "seed": 20099
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_snow"
+    },
+    "test_fog": {
+      "name": "test_fog",
+      "category": "test",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 1000,
+          "seed": 20100
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_fog"
+    },
+    "test_fast_mix": {
+      "name": "test_fast_mix",
+      "category": "test",
+      "stage": "fast",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20057
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20058
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20059
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 125,
+          "seed": 20060
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20061
+        },
+        {
+          "scenario": "FOG",
+          "duration": 125,
+          "seed": 20062
+        },
+        {
+          "scenario": "BASE",
+          "duration": 125,
+          "seed": 20063
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 125,
+          "seed": 20064
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_fast_mix"
+    },
+    "test_slow_mix": {
+      "name": "test_slow_mix",
+      "category": "test",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20065
+        },
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20066
+        },
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20067
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20068
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_slow_mix"
+    },
+    "test_random_mix_1": {
+      "name": "test_random_mix_1",
+      "category": "test",
+      "stage": "random",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 145,
+          "seed": 20101
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 118,
+          "seed": 20102
+        },
+        {
+          "scenario": "BASE",
+          "duration": 169,
+          "seed": 20103
+        },
+        {
+          "scenario": "FOG",
+          "duration": 130,
+          "seed": 20104
+        },
+        {
+          "scenario": "BASE",
+          "duration": 197,
+          "seed": 20105
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 138,
+          "seed": 20106
+        },
+        {
+          "scenario": "BASE",
+          "duration": 103,
+          "seed": 20107
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_random_mix_1"
+    },
+    "test_random_mix_2": {
+      "name": "test_random_mix_2",
+      "category": "test",
+      "stage": "random",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 185,
+          "seed": 20108
+        },
+        {
+          "scenario": "BASE",
+          "duration": 190,
+          "seed": 20109
+        },
+        {
+          "scenario": "FOG",
+          "duration": 126,
+          "seed": 20110
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 136,
+          "seed": 20111
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 137,
+          "seed": 20112
+        },
+        {
+          "scenario": "BASE",
+          "duration": 116,
+          "seed": 20113
+        },
+        {
+          "scenario": "FOG",
+          "duration": 110,
+          "seed": 20114
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/test/test_random_mix_2"
+    },
+    "train_base_1": {
+      "name": "train_base_1",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 1000,
+          "seed": 20001
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_base_1"
+    },
+    "train_base_2": {
+      "name": "train_base_2",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 1000,
+          "seed": 20002
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_base_2"
+    },
+    "train_rain_1": {
+      "name": "train_rain_1",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 1000,
+          "seed": 20003
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_rain_1"
+    },
+    "train_rain_2": {
+      "name": "train_rain_2",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 1000,
+          "seed": 20004
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_rain_2"
+    },
+    "train_snow_1": {
+      "name": "train_snow_1",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 1000,
+          "seed": 20005
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_snow_1"
+    },
+    "train_snow_2": {
+      "name": "train_snow_2",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "SNOW",
+          "duration": 1000,
+          "seed": 20006
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_snow_2"
+    },
+    "train_fog_1": {
+      "name": "train_fog_1",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 1000,
+          "seed": 20007
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_fog_1"
+    },
+    "train_fog_2": {
+      "name": "train_fog_2",
+      "category": "train",
+      "stage": "static",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 1000,
+          "seed": 20008
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_fog_2"
+    },
+    "train_slow_mix_1": {
+      "name": "train_slow_mix_1",
+      "category": "train",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20009
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20010
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20011
+        },
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20012
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_slow_mix_1"
+    },
+    "train_slow_mix_2": {
+      "name": "train_slow_mix_2",
+      "category": "train",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20013
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20014
+        },
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20015
+        },
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20016
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_slow_mix_2"
+    },
+    "train_slow_mix_3": {
+      "name": "train_slow_mix_3",
+      "category": "train",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20017
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20018
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20019
+        },
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20020
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_slow_mix_3"
+    },
+    "train_slow_mix_4": {
+      "name": "train_slow_mix_4",
+      "category": "train",
+      "stage": "slow",
+      "blocks": [
+        {
+          "scenario": "FOG",
+          "duration": 250,
+          "seed": 20021
+        },
+        {
+          "scenario": "BASE",
+          "duration": 250,
+          "seed": 20022
+        },
+        {
+          "scenario": "SNOW",
+          "duration": 250,
+          "seed": 20023
+        },
+        {
+          "scenario": "RAIN",
+          "duration": 250,
+          "seed": 20024
+        }
+      ],
+      "duration": 1000,
+      "path": "data/datasets/train/train_slow_mix_4"
+    }
+  },
+  "users": 12,
+  "mobile_fogs": 3,
+  "categories": [
+    "train",
+    "finetune",
+    "test"
+  ]
+}

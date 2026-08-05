@@ -1,0 +1,16 @@
+{
+  "name": "train_base_1",
+  "category": "train",
+  "stage": "static",
+  "blocks": [
+    {
+      "scenario": "BASE",
+      "duration": 1000,
+      "seed": 20001
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

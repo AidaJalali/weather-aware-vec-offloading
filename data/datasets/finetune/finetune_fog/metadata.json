@@ -1,0 +1,16 @@
+{
+  "name": "finetune_fog",
+  "category": "finetune",
+  "stage": "static",
+  "blocks": [
+    {
+      "scenario": "FOG",
+      "duration": 1000,
+      "seed": 20072
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

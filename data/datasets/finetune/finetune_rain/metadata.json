@@ -1,0 +1,16 @@
+{
+  "name": "finetune_rain",
+  "category": "finetune",
+  "stage": "static",
+  "blocks": [
+    {
+      "scenario": "RAIN",
+      "duration": 1000,
+      "seed": 20070
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

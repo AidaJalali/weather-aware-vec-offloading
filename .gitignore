@@ -45,9 +45,8 @@ pip-delete-this-directory.txt
 *.pkl
 output/
 results/
-source/data/sumo/**
-!source/data/sumo/**/
-!source/data/sumo/**/*.xml.gz
+source/data/sumo/
+data/sumo/
 .matplotlib/
 
 # Local reference material and project notes

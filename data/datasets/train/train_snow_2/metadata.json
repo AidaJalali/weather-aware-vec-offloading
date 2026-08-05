@@ -1,0 +1,16 @@
+{
+  "name": "train_snow_2",
+  "category": "train",
+  "stage": "static",
+  "blocks": [
+    {
+      "scenario": "SNOW",
+      "duration": 1000,
+      "seed": 20006
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

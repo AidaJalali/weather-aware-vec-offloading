@@ -1,0 +1,31 @@
+{
+  "name": "finetune_slow_mix_2",
+  "category": "finetune",
+  "stage": "slow",
+  "blocks": [
+    {
+      "scenario": "BASE",
+      "duration": 250,
+      "seed": 20077
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 250,
+      "seed": 20078
+    },
+    {
+      "scenario": "FOG",
+      "duration": 250,
+      "seed": 20079
+    },
+    {
+      "scenario": "RAIN",
+      "duration": 250,
+      "seed": 20080
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

@@ -1,0 +1,51 @@
+{
+  "name": "finetune_fast_mix_1",
+  "category": "finetune",
+  "stage": "fast",
+  "blocks": [
+    {
+      "scenario": "SNOW",
+      "duration": 125,
+      "seed": 20081
+    },
+    {
+      "scenario": "RAIN",
+      "duration": 125,
+      "seed": 20082
+    },
+    {
+      "scenario": "BASE",
+      "duration": 125,
+      "seed": 20083
+    },
+    {
+      "scenario": "SNOW",
+      "duration": 125,
+      "seed": 20084
+    },
+    {
+      "scenario": "BASE",
+      "duration": 125,
+      "seed": 20085
+    },
+    {
+      "scenario": "FOG",
+      "duration": 125,
+      "seed": 20086
+    },
+    {
+      "scenario": "FOG",
+      "duration": 125,
+      "seed": 20087
+    },
+    {
+      "scenario": "RAIN",
+      "duration": 125,
+      "seed": 20088
+    }
+  ],
+  "duration": 1000,
+  "users": 12,
+  "mobile_fogs": 3,
+  "independently_seeded_blocks": true
+}

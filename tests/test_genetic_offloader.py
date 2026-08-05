@@ -102,7 +102,6 @@ class GeneticBatchOffloaderTests(unittest.TestCase):
         optimizer = GeneticBatchOffloader(
             GeneticOffloaderConfig(
                 reliability_weight=1.0,
-                path_loss_delay_per_db=0.05,
             )
         )
         base = make_task("base", deadline=20.0)
@@ -127,7 +126,7 @@ class GeneticBatchOffloaderTests(unittest.TestCase):
 
         self.assertGreater(adverse_cost, base_cost)
 
-    def test_optimizer_changes_decision_when_weather_risk_is_high(self) -> None:
+    def test_optimizer_prioritizes_reliable_feasible_assignment(self) -> None:
         optimizer = GeneticBatchOffloader(
             GeneticOffloaderConfig(
                 population_size=12,
@@ -149,8 +148,42 @@ class GeneticBatchOffloaderTests(unittest.TestCase):
         base_result = optimizer.optimize((base,), vehicle_states())
         adverse_result = optimizer.optimize((adverse,), vehicle_states())
 
-        self.assertNotEqual(base_result.assignments, (OffloadTarget.LOCAL,))
+        self.assertEqual(base_result.assignments, (OffloadTarget.LOCAL,))
         self.assertEqual(adverse_result.assignments, (OffloadTarget.LOCAL,))
+        self.assertLess(
+            base_result.evaluation.expected_deadline_failures,
+            optimizer.evaluate(
+                (OffloadTarget.FOG,),
+                (adverse,),
+                vehicle_states(),
+            ).expected_deadline_failures,
+        )
+
+    def test_ranking_makes_packet_failures_an_explicit_constraint(self) -> None:
+        optimizer = GeneticBatchOffloader()
+        adverse = make_task(
+            "adverse",
+            deadline=20.0,
+            plr=80.0,
+            scenario="FOG",
+        )
+
+        local = optimizer.evaluate(
+            (OffloadTarget.LOCAL,),
+            (adverse,),
+            vehicle_states(),
+        )
+        fog = optimizer.evaluate(
+            (OffloadTarget.FOG,),
+            (adverse,),
+            vehicle_states(),
+        )
+
+        self.assertEqual(local.ranking_key[0], local.expected_task_failures)
+        self.assertEqual(fog.ranking_key[0], fog.expected_task_failures)
+        self.assertEqual(local.ranking_key[1], local.expected_packet_losses)
+        self.assertEqual(fog.ranking_key[1], fog.expected_packet_losses)
+        self.assertLess(local.ranking_key, fog.ranking_key)
 
     def test_optimizer_respects_practical_time_bound(self) -> None:
         limit = 0.03

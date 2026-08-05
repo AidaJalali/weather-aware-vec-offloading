@@ -1,0 +1,6 @@
+{
+  "last_stage": "slow",
+  "last_dataset": "train_slow_mix_4",
+  "checkpoint": "/home/alireza/Sharif/Term 8/Real Time Systems/Project/Phase2/weather-aware-vec-offloading/outputs/models/sac/checkpoints/checkpoint_12_train_slow_mix_4.zip",
+  "total_training_steps": 307112
+}
