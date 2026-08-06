@@ -62,9 +62,12 @@ class TaskGenerator:
         lane_vehicle_count: int,
     ) -> list["Task"]:
         cfg = self.config
+        relative_speed_threshold = (
+            cfg.traffic_min_speed_threshold * weather_effect.speed_factor
+        )
         traffic_high = (
             lane_vehicle_count > cfg.lane_traffic_threshold
-            or vehicle_speed < cfg.traffic_min_speed_threshold
+            or vehicle_speed < relative_speed_threshold
         )
 
         if traffic_high:
@@ -115,7 +118,6 @@ class TaskGenerator:
                 data_size=data_size,
                 weather_scenario=weather_effect.scenario.value,
                 deadline_type=weather_effect.deadline_label,
-                path_loss_increase_db=weather_effect.sample_path_loss_increase_db(self.rng),
                 plr_increase_percent=weather_effect.sample_plr_increase_percent(self.rng),
             ))
 
@@ -133,5 +135,4 @@ class Task:
     data_size: float
     weather_scenario: str
     deadline_type: str
-    path_loss_increase_db: float
     plr_increase_percent: float

@@ -192,7 +192,6 @@ class Task:
     type_index: int = 0
     weather_scenario: str = WeatherScenario.BASE.value
     deadline_type: str = "Normal"
-    path_loss_increase_db: float = 0.0
     plr_increase_percent: float = 0.0
 
 class Generator:
@@ -314,7 +313,6 @@ class Generator:
                 t_elem.set('dataSize', f"{task.dataSize:.2f}")
                 t_elem.set('weather_scenario', task.weather_scenario)
                 t_elem.set('deadline_type', task.deadline_type)
-                t_elem.set('path_loss_increase_db', f"{task.path_loss_increase_db:.2f}")
                 t_elem.set('plr_increase_percent', f"{task.plr_increase_percent:.2f}")
 
         Et.indent(root, space="    ", level=0)
@@ -341,7 +339,6 @@ class Generator:
                 t_elem.set('type_index', str(task.type_index))
                 t_elem.set('weather_scenario', task.weather_scenario)
                 t_elem.set('deadline_type', task.deadline_type)
-                t_elem.set('path_loss_increase_db', f"{task.path_loss_increase_db:.2f}")
                 t_elem.set('plr_increase_percent', f"{task.plr_increase_percent:.2f}")
 
         Et.indent(root, space="    ", level=0)
@@ -415,7 +412,6 @@ class Generator:
                 type_index=type_index,
                 weather_scenario=weather_effect.scenario.value,
                 deadline_type=weather_effect.deadline_label,
-                path_loss_increase_db=weather_effect.sample_path_loss_increase_db(),
                 plr_increase_percent=weather_effect.sample_plr_increase_percent(),
             ))
 
@@ -515,7 +511,6 @@ class Generator:
                 dataSize=dataSize,
                 weather_scenario=weather_effect.scenario.value,
                 deadline_type=weather_effect.deadline_label,
-                path_loss_increase_db=weather_effect.sample_path_loss_increase_db(),
                 plr_increase_percent=weather_effect.sample_plr_increase_percent(),
             ))
 

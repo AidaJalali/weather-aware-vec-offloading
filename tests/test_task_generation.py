@@ -78,11 +78,31 @@ class TaskGeneratorTests(unittest.TestCase):
             weather_effect=fog_effect, lane_vehicle_count=2,
         )
         if base_tasks and fog_tasks:
-            # FOG scenario should include weather attributes (path loss, PLR)
+            # FOG scenario should include weather-dependent task attributes.
             self.assertNotEqual(
                 base_tasks[0].weather_scenario,
                 fog_tasks[0].weather_scenario,
             )
+
+    def test_weather_speed_reduction_is_not_treated_as_congestion(self) -> None:
+        config = TaskGenerationConfig(
+            normal_min_tasks=0,
+            normal_max_tasks=0,
+            congested_min_tasks=5,
+            congested_max_tasks=5,
+        )
+        generator = TaskGenerator(config=config, rng=random.Random(4))
+        fog = get_weather_effect(WeatherScenario.FOG)
+
+        tasks = generator.generate_for_vehicle(
+            "PKW_000",
+            vehicle_speed=5.0,
+            simulation_time=1,
+            weather_effect=fog,
+            lane_vehicle_count=2,
+        )
+
+        self.assertEqual(tasks, [])
 
     def test_congestion_increases_task_count(self) -> None:
         """Busy lanes should produce more tasks than quiet ones."""

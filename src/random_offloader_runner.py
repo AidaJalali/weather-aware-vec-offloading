@@ -13,7 +13,12 @@ from genetic_offloader_runner import (
     batch_tasks,
     discover_datasets,
 )
-from infrastructure import ExecutionModel, load_tasks, load_vehicle_states
+from infrastructure import (
+    ExecutionModel,
+    load_tasks,
+    load_vehicle_states,
+    mobile_fog_nodes_by_time,
+)
 from offloading_simulator import (
     DeterministicChannel,
     ResourceCapacities,
@@ -95,6 +100,7 @@ def run_random_split(
 
     for dataset_index, dataset in enumerate(datasets, start=1):
         vehicle_states = load_vehicle_states(dataset.vehicles_file)
+        fog_nodes_by_time = mobile_fog_nodes_by_time(vehicle_states)
         tasks = load_tasks(dataset.tasks_file)
         network_load_by_time = Counter(task.release_time for task in tasks)
         resource_state = ResourceState()
@@ -122,6 +128,7 @@ def run_random_split(
                 model=model,
                 capacities=capacities,
                 network_load_by_time=network_load_by_time,
+                fog_nodes_by_time=fog_nodes_by_time,
             )
             for result in simulated:
                 processed_tasks += 1

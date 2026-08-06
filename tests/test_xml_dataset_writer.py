@@ -53,7 +53,6 @@ class DatasetWriterTests(unittest.TestCase):
             data_size=1.0,
             weather_scenario="BASE",
             deadline_type="Normal",
-            path_loss_increase_db=0.0,
             plr_increase_percent=0.0,
         )
 
@@ -171,7 +170,7 @@ class DatasetWriterTests(unittest.TestCase):
             id="PKW_000_S_5_0", deadline=20.0, exec_time=3.5, power=2.1,
             creator="PKW_000", cycles_per_bit=1.8, data_size=0.9,
             weather_scenario="RAIN", deadline_type="Tight Deadline",
-            path_loss_increase_db=3.2, plr_increase_percent=17.5,
+            plr_increase_percent=17.5,
         )
         writer.add_timestep(5, [v], [task])
         writer.finish()
@@ -196,7 +195,6 @@ class DatasetWriterTests(unittest.TestCase):
         self.assertEqual(t.data_size, 0.9)
         self.assertEqual(t.weather_scenario, "RAIN")
         self.assertEqual(t.deadline_type, "Tight Deadline")
-        self.assertEqual(t.path_loss_increase_db, 3.2)
         self.assertEqual(t.plr_increase_percent, 17.5)
 
 

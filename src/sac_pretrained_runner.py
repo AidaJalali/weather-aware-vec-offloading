@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Sequence
 
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-vec-cache")
-
-from stable_baselines3 import SAC
+from discrete_sac import DiscreteSACAgent
 
 from genetic_offloader_runner import (
     ProgressBar,
@@ -21,7 +18,7 @@ from random_offloader_runner import (
     write_rows,
     write_summary,
 )
-from vec_offloading_env import RewardConfig, VECOffloadingEnv
+from vec_offloading_env import ObservationScale, RewardConfig, VECOffloadingEnv
 
 
 def _row_from_info(
@@ -97,6 +94,13 @@ def run_sac_pretrained_split(
     capacities = capacities or ResourceCapacities()
     progress = ProgressBar(enabled=show_progress, update_every=progress_every)
     rows: list[RandomRunRow] = []
+    agent, checkpoint_data = DiscreteSACAgent.load(
+        checkpoint_path,
+        device=device,
+    )
+    observation_scale = ObservationScale(
+        **checkpoint_data["observation_scale"]
+    )
 
     if show_progress:
         print(
@@ -120,12 +124,9 @@ def run_sac_pretrained_split(
             vehicle_states,
             resource_capacities=capacities,
             reward_config=RewardConfig(),
+            observation_scale=observation_scale,
         )
-        model = SAC.load(
-            str(checkpoint_path),
-            device=device,
-        )
-        if model.observation_space.shape != environment.observation_space.shape:
+        if agent.observation_dim != environment.observation_space.shape[0]:
             raise ValueError(
                 "SAC checkpoint observation shape does not match the environment"
             )
@@ -134,7 +135,7 @@ def run_sac_pretrained_split(
 
         for batch_index, batch in enumerate(batches, start=1):
             for _task in batch:
-                action, _ = model.predict(observation, deterministic=True)
+                action = agent.select_action(observation, deterministic=True)
                 observation, _, terminated, truncated, info = environment.step(action)
                 rows.append(
                     _row_from_info(

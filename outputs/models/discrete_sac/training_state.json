@@ -1,0 +1,14 @@
+{
+  "epochs": 10,
+  "environment_steps": 1464770,
+  "gradient_updates": 365943,
+  "best_model": "/home/alireza/Sharif/Term 8/Real Time Systems/Project/Phase2/weather-aware-vec-offloading/outputs/models/discrete_sac/sac_discrete_best.pt",
+  "best_validation_reward": -0.16122208254152198,
+  "final_model": "/home/alireza/Sharif/Term 8/Real Time Systems/Project/Phase2/weather-aware-vec-offloading/outputs/models/discrete_sac/sac_discrete_final.pt",
+  "replay_weather_counts": {
+    "BASE": 125000,
+    "RAIN": 125000,
+    "SNOW": 125000,
+    "FOG": 125000
+  }
+}

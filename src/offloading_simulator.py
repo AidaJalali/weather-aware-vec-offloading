@@ -9,6 +9,7 @@ from typing import Mapping, Sequence
 from infrastructure import (
     DEFAULT_FOG_NODES,
     ExecutionModel,
+    FogNode,
     TaskRecord,
     VehicleState,
     distance,
@@ -18,6 +19,7 @@ from infrastructure import (
 
 
 VehicleLookup = Mapping[str | tuple[float, str], VehicleState]
+FogLookup = Mapping[float, Sequence[FogNode]]
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,15 @@ class ResourceState:
         busy = sum(available_at > current_time for available_at in queue)
         busy = min(busy, capacity)
         return busy / capacity, (capacity - busy) / capacity
+
+    def estimated_wait(
+        self,
+        resource: str,
+        capacities: ResourceCapacities,
+        arrival_time: float,
+    ) -> float:
+        queue = self.queue_for(resource, capacities)
+        return max(0.0, min(queue) - arrival_time)
 
 
 class DeterministicChannel:
@@ -231,8 +242,9 @@ def simulate_fog(
     vehicle: VehicleState,
     channel: DeterministicChannel,
     model: ExecutionModel,
+    fog_nodes: Sequence[FogNode] = DEFAULT_FOG_NODES,
 ) -> ExecutionOutcome:
-    fog = nearest_fog(vehicle, DEFAULT_FOG_NODES)
+    fog = nearest_fog(vehicle, fog_nodes)
     wireless_time = task.data_size / model.fog_bandwidth
     access_delay = (
         distance(vehicle.x, vehicle.y, fog.x, fog.y)
@@ -337,11 +349,12 @@ def _simulate_target(
     channel: DeterministicChannel,
     model: ExecutionModel,
     network_load: int,
+    fog_nodes: Sequence[FogNode],
 ) -> ExecutionOutcome:
     if target == "LOCAL":
         return simulate_local(task, model)
     if target == "FOG":
-        return simulate_fog(task, vehicle, channel, model)
+        return simulate_fog(task, vehicle, channel, model, fog_nodes)
     return simulate_cloud(task, channel, model, network_load)
 
 
@@ -386,6 +399,7 @@ def simulate_assignments(
     model: ExecutionModel | None = None,
     capacities: ResourceCapacities | None = None,
     network_load_by_time: Mapping[float, int] | None = None,
+    fog_nodes_by_time: FogLookup | None = None,
 ) -> list[AssignmentResult]:
     """Execute target assignments and update persistent resource availability."""
 
@@ -411,6 +425,11 @@ def simulate_assignments(
         target = _target_name(raw_target)
         vehicle = _vehicle_for_task(task, vehicle_states)
         network_load = int(network_load_by_time.get(task.release_time, 0))
+        fog_nodes = (
+            tuple(fog_nodes_by_time.get(task.release_time, ()))
+            if fog_nodes_by_time is not None
+            else ()
+        ) or DEFAULT_FOG_NODES
         outcome = _simulate_target(
             target,
             task,
@@ -418,6 +437,7 @@ def simulate_assignments(
             channel_randomness,
             model,
             network_load,
+            fog_nodes,
         )
 
         queue = resource_state.queue_for(outcome.resource, capacities)

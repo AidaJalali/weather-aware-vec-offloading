@@ -18,7 +18,11 @@ PROJECT_ROOT = SOURCE_DIR.parent
 DEFAULT_DATA_ROOT = PROJECT_ROOT / "data" / "datasets"
 DEFAULT_RESULTS_ROOT = PROJECT_ROOT / "outputs" / "evaluation"
 DEFAULT_SAC_CHECKPOINT = (
-    PROJECT_ROOT / "outputs" / "models" / "sac" / "sac_pretrained_final.zip"
+    PROJECT_ROOT
+    / "outputs"
+    / "models"
+    / "discrete_sac"
+    / "sac_discrete_best.pt"
 )
 
 

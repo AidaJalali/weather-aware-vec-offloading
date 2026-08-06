@@ -186,7 +186,6 @@ class DatasetWriter:
                 elem.set("dataSize", f"{t.data_size:.2f}")
                 elem.set("weather_scenario", t.weather_scenario)
                 elem.set("deadline_type", t.deadline_type)
-                elem.set("path_loss_increase_db", f"{t.path_loss_increase_db:.2f}")
                 elem.set("plr_increase_percent", f"{t.plr_increase_percent:.2f}")
 
         Et.indent(root, space="    ", level=0)

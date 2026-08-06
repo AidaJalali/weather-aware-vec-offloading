@@ -19,7 +19,6 @@ def make_task(
     deadline: float = 10.0,
     exec_time: float = 8.0,
     plr: float = 0.0,
-    path_loss: float = 0.0,
     scenario: str = "BASE",
 ) -> TaskRecord:
     return TaskRecord(
@@ -33,7 +32,6 @@ def make_task(
         data_size=0.1,
         weather_scenario=scenario,
         deadline_type="Normal",
-        path_loss_increase_db=path_loss,
         plr_increase_percent=plr,
     )
 
@@ -109,7 +107,6 @@ class GeneticBatchOffloaderTests(unittest.TestCase):
             "fog",
             deadline=20.0,
             plr=30.0,
-            path_loss=6.0,
             scenario="FOG",
         )
 
@@ -141,7 +138,6 @@ class GeneticBatchOffloaderTests(unittest.TestCase):
             "adverse",
             deadline=20.0,
             plr=90.0,
-            path_loss=6.0,
             scenario="FOG",
         )
 

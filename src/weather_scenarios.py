@@ -23,15 +23,10 @@ class WeatherEffect:
     deadline_free_time_range: tuple[float, float]
     cycles_per_bit_multiplier_range: tuple[float, float]
     task_generation_rate_multiplier: float
-    path_loss_increase_db_range: tuple[float, float]
     plr_increase_percent_range: tuple[float, float]
 
     def sample_cycles_multiplier(self, rng=random) -> float:
         low, high = self.cycles_per_bit_multiplier_range
-        return rng.uniform(low, high)
-
-    def sample_path_loss_increase_db(self, rng=random) -> float:
-        low, high = self.path_loss_increase_db_range
         return rng.uniform(low, high)
 
     def sample_plr_increase_percent(self, rng=random) -> float:
@@ -47,7 +42,6 @@ WEATHER_EFFECTS: Mapping[WeatherScenario, WeatherEffect] = {
         deadline_free_time_range=(3.0, 15.0),
         cycles_per_bit_multiplier_range=(1.0, 1.0),
         task_generation_rate_multiplier=1.00,
-        path_loss_increase_db_range=(0.0, 0.0),
         plr_increase_percent_range=(0.0, 0.0),
     ),
     WeatherScenario.RAIN: WeatherEffect(
@@ -57,7 +51,6 @@ WEATHER_EFFECTS: Mapping[WeatherScenario, WeatherEffect] = {
         deadline_free_time_range=(2.0, 10.0),
         cycles_per_bit_multiplier_range=(1.2, 1.4),
         task_generation_rate_multiplier=1.20,
-        path_loss_increase_db_range=(2.0, 4.0),
         plr_increase_percent_range=(15.0, 20.0),
     ),
     WeatherScenario.SNOW: WeatherEffect(
@@ -67,7 +60,6 @@ WEATHER_EFFECTS: Mapping[WeatherScenario, WeatherEffect] = {
         deadline_free_time_range=(1.0, 6.0),
         cycles_per_bit_multiplier_range=(1.5, 1.8),
         task_generation_rate_multiplier=0.50,
-        path_loss_increase_db_range=(1.0, 2.0),
         plr_increase_percent_range=(5.0, 10.0),
     ),
     WeatherScenario.FOG: WeatherEffect(
@@ -77,7 +69,6 @@ WEATHER_EFFECTS: Mapping[WeatherScenario, WeatherEffect] = {
         deadline_free_time_range=(5.0, 20.0),
         cycles_per_bit_multiplier_range=(1.3, 1.6),
         task_generation_rate_multiplier=1.25,
-        path_loss_increase_db_range=(4.0, 6.0),
         plr_increase_percent_range=(25.0, 30.0),
     ),
 }
@@ -129,4 +120,3 @@ def scenario_for_time(
     if not earlier_steps:
         return WeatherScenario.BASE
     return scenario_by_time[max(earlier_steps)]
-

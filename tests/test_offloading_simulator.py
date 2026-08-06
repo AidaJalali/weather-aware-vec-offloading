@@ -3,7 +3,13 @@ from __future__ import annotations
 import unittest
 
 from algorithms import GeneticBatchOffloader, GeneticOffloaderConfig, OffloadTarget
-from infrastructure import ExecutionModel, TaskRecord, VehicleState, dynamic_backhaul_delay
+from infrastructure import (
+    ExecutionModel,
+    FogNode,
+    TaskRecord,
+    VehicleState,
+    dynamic_backhaul_delay,
+)
 from offloading_simulator import (
     DeterministicChannel,
     ResourceCapacities,
@@ -19,7 +25,6 @@ def make_task(
     deadline: float = 40.0,
     exec_time: float = 10.0,
     scenario: str = "BASE",
-    path_loss: float = 0.0,
 ) -> TaskRecord:
     return TaskRecord(
         id=task_id,
@@ -32,7 +37,6 @@ def make_task(
         data_size=0.4,
         weather_scenario=scenario,
         deadline_type="Normal",
-        path_loss_increase_db=path_loss,
         plr_increase_percent=0.0,
     )
 
@@ -77,12 +81,9 @@ class SharedSimulatorTests(unittest.TestCase):
         self.assertEqual(second_result.queue_delay, 9.0)
         self.assertEqual(second_result.finish_time, 20.0)
 
-    def test_cloud_uses_dynamic_backhaul_without_path_loss_delay(self) -> None:
+    def test_cloud_uses_dynamic_backhaul(self) -> None:
         model = ExecutionModel(cloud_base_packet_loss_percent=0.0)
-        first = make_task("same", 0.0, scenario="FOG", path_loss=0.0)
-        changed_path_loss = TaskRecord(
-            **{**first.__dict__, "path_loss_increase_db": 20.0}
-        )
+        first = make_task("same", 0.0, scenario="FOG")
         states = {(0.0, "vehicle-1"): vehicle(0.0)}
         expected_backhaul = dynamic_backhaul_delay("FOG", 12, model)
 
@@ -95,18 +96,39 @@ class SharedSimulatorTests(unittest.TestCase):
             model=model,
             network_load_by_time={0.0: 12},
         )[0]
-        changed_result = simulate_assignments(
-            (changed_path_loss,),
-            (OffloadTarget.CLOUD,),
+        self.assertEqual(first_result.backhaul_delay, expected_backhaul)
+
+    def test_fog_assignment_uses_mobile_fog_position(self) -> None:
+        model = ExecutionModel(
+            fog_base_packet_loss_percent=0.0,
+            fog_distance_delay_factor=0.01,
+        )
+        task = make_task("mobile", 0.0)
+        states = {(0.0, "vehicle-1"): vehicle(0.0)}
+        near = FogNode("LKW_000", 150.0, 150.0)
+        far = FogNode("LKW_000", 650.0, 150.0)
+
+        near_result = simulate_assignments(
+            (task,),
+            (OffloadTarget.FOG,),
             ResourceState(),
             DeterministicChannel(5),
             vehicle_states=states,
             model=model,
-            network_load_by_time={0.0: 12},
+            fog_nodes_by_time={0.0: (near,)},
+        )[0]
+        far_result = simulate_assignments(
+            (task,),
+            (OffloadTarget.FOG,),
+            ResourceState(),
+            DeterministicChannel(5),
+            vehicle_states=states,
+            model=model,
+            fog_nodes_by_time={0.0: (far,)},
         )[0]
 
-        self.assertEqual(first_result.backhaul_delay, expected_backhaul)
-        self.assertEqual(first_result.latency, changed_result.latency)
+        self.assertEqual(near_result.resource, "FOG:LKW_000")
+        self.assertGreater(far_result.latency, near_result.latency)
 
     def test_channel_samples_are_repeatable_and_order_independent(self) -> None:
         channel = DeterministicChannel(19)

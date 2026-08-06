@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from types import MappingProxyType
 from typing import Mapping, Sequence
 
 import gymnasium as gym
@@ -17,8 +16,10 @@ from infrastructure import (
     TaskRecord,
     VehicleState,
     distance,
+    dynamic_backhaul_delay,
     load_tasks,
     load_vehicle_states,
+    mobile_fog_nodes_by_time,
     nearest_fog,
 )
 from offloading_simulator import (
@@ -32,115 +33,160 @@ from weather_scenarios import WeatherScenario, normalize_scenario
 
 
 @dataclass(frozen=True)
-class RewardProfile:
-    latency_weight: float = 0.35
-    energy_weight: float = 0.25
-    reliability_weight: float = 0.15
-    packet_loss_penalty: float = 2.0
-    deadline_miss_penalty: float = 5.0
-
-    def __post_init__(self) -> None:
-        if any(value < 0.0 for value in self.__dict__.values()):
-            raise ValueError("reward weights and penalties cannot be negative")
-
-
-@dataclass(frozen=True)
 class RewardConfig:
-    """Fixed reward by default, optionally overridden per weather scenario."""
-
-    default: RewardProfile = field(default_factory=RewardProfile)
-    weather_profiles: Mapping[str | WeatherScenario, RewardProfile] = field(
-        default_factory=dict
-    )
-    name: str = "fixed"
+    loss_weight: float = 0.50
+    latency_weight: float = 0.35
+    energy_weight: float = 0.15
+    ratio_cap: float = 2.0
+    max_per_attempt_loss: float = 0.35
 
     def __post_init__(self) -> None:
-        normalized: dict[WeatherScenario, RewardProfile] = {}
-        for scenario, profile in self.weather_profiles.items():
-            if not isinstance(profile, RewardProfile):
-                raise TypeError("weather profile values must be RewardProfile")
-            normalized[normalize_scenario(scenario)] = profile
-        object.__setattr__(
-            self,
-            "weather_profiles",
-            MappingProxyType(normalized),
-        )
-        if not self.name.strip():
-            raise ValueError("reward configuration name cannot be empty")
+        weights = (self.loss_weight, self.latency_weight, self.energy_weight)
+        if any(weight < 0.0 for weight in weights):
+            raise ValueError("reward weights cannot be negative")
+        if not np.isclose(sum(weights), 1.0):
+            raise ValueError("reward weights must sum to 1")
+        if self.ratio_cap <= 0.0:
+            raise ValueError("ratio_cap must be positive")
+        if not 0.0 < self.max_per_attempt_loss <= 1.0:
+            raise ValueError("max_per_attempt_loss must be in (0, 1]")
 
-    def for_weather(
-        self,
-        scenario: str | WeatherScenario,
-    ) -> RewardProfile:
-        return self.weather_profiles.get(
-            normalize_scenario(scenario),
-            self.default,
-        )
 
-    @classmethod
-    def adaptive_default(cls) -> "RewardConfig":
-        """Initial configurable profiles; tune these through experiments."""
-        return cls(
-            name="weather_adaptive",
-            default=RewardProfile(),
-            weather_profiles={
-                WeatherScenario.BASE: RewardProfile(
-                    latency_weight=0.35,
-                    energy_weight=0.25,
-                    reliability_weight=0.15,
-                    packet_loss_penalty=2.0,
-                    deadline_miss_penalty=5.0,
-                ),
-                WeatherScenario.RAIN: RewardProfile(
-                    latency_weight=0.40,
-                    energy_weight=0.20,
-                    reliability_weight=0.25,
-                    packet_loss_penalty=2.5,
-                    deadline_miss_penalty=6.0,
-                ),
-                WeatherScenario.SNOW: RewardProfile(
-                    latency_weight=0.45,
-                    energy_weight=0.20,
-                    reliability_weight=0.15,
-                    packet_loss_penalty=2.0,
-                    deadline_miss_penalty=7.0,
-                ),
-                WeatherScenario.FOG: RewardProfile(
-                    latency_weight=0.30,
-                    energy_weight=0.20,
-                    reliability_weight=0.35,
-                    packet_loss_penalty=3.0,
-                    deadline_miss_penalty=5.0,
-                ),
-            },
-        )
+def _percentile_scale(values: Sequence[float], percentile: float) -> float:
+    if not values:
+        return 1.0
+    return max(float(np.percentile(np.asarray(values), percentile)), 1e-6)
 
 
 @dataclass(frozen=True)
 class ObservationScale:
-    speed: float = 50.0
-    execution_time: float = 30.0
-    data_size: float = 3000.0
-    cycles_per_bit: float = 3000.0
-    deadline_slack: float = 30.0
-    path_loss_db: float = 10.0
-    fog_distance: float = 1500.0
-    task_power: float = 10.0
-    network_load: float = 50.0
+    data_size: float
+    cycles_per_bit: float
+    execution_time: float
+    deadline_budget: float
+    task_power: float
+    fog_distance: float
+    network_load: float
+    queue_wait: float
+    remaining_tasks: float
+    remaining_compute: float
+    remaining_data: float
 
     def __post_init__(self) -> None:
-        if any(value <= 0.0 for value in self.__dict__.values()):
+        if any(value <= 0.0 for value in asdict(self).values()):
             raise ValueError("observation scales must be positive")
 
+    @classmethod
+    def from_data(
+        cls,
+        tasks: Sequence[TaskRecord],
+        vehicle_states: Mapping[str | tuple[float, str], VehicleState],
+        *,
+        percentile: float = 99.0,
+    ) -> "ObservationScale":
+        return cls.from_datasets(
+            ((tasks, vehicle_states),),
+            percentile=percentile,
+        )
 
-class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
-    """Single-task VEC environment compatible with continuous-action SAC.
+    @classmethod
+    def from_datasets(
+        cls,
+        datasets: Sequence[
+            tuple[
+                Sequence[TaskRecord],
+                Mapping[str | tuple[float, str], VehicleState],
+            ]
+        ],
+        *,
+        percentile: float = 99.0,
+    ) -> "ObservationScale":
+        if not datasets or not any(tasks for tasks, _ in datasets):
+            raise ValueError("cannot derive observation scales without tasks")
+        if not 0.0 < percentile <= 100.0:
+            raise ValueError("percentile must be in (0, 100]")
 
-    Each step consumes one task. SAC supplies one scalar action in [-1, 1], which
-    is mapped to LOCAL, FOG, or CLOUD. The transition uses the same execution
-    simulator as all baseline algorithms, including persistent resource queues,
-    energy, retransmission, weather-aware backhaul, and deadline handling.
-    """
+        all_tasks: list[TaskRecord] = []
+        network_load_values: list[float] = []
+        compute_values: list[float] = []
+        data_values: list[float] = []
+        fog_distances: list[float] = []
+        for tasks, vehicle_states in datasets:
+            all_tasks.extend(tasks)
+            network_load = Counter(task.release_time for task in tasks)
+            compute_by_time: Counter[float] = Counter()
+            data_by_time: Counter[float] = Counter()
+            for task in tasks:
+                compute_by_time[task.release_time] += task.exec_time
+                data_by_time[task.release_time] += task.data_size
+            network_load_values.extend(network_load.values())
+            compute_values.extend(compute_by_time.values())
+            data_values.extend(data_by_time.values())
+
+            fog_nodes_by_time = mobile_fog_nodes_by_time(vehicle_states)
+            for task in tasks:
+                vehicle = _vehicle_for_task(task, vehicle_states)
+                fog_nodes = fog_nodes_by_time.get(
+                    task.release_time, DEFAULT_FOG_NODES
+                )
+                fog = nearest_fog(vehicle, fog_nodes)
+                fog_distances.append(
+                    distance(vehicle.x, vehicle.y, fog.x, fog.y)
+                )
+
+        deadline_budgets = [
+            max(task.deadline - task.release_time, 1e-6)
+            for task in all_tasks
+        ]
+        deadline_scale = _percentile_scale(deadline_budgets, percentile)
+        return cls(
+            data_size=_percentile_scale(
+                [task.data_size for task in all_tasks], percentile
+            ),
+            cycles_per_bit=_percentile_scale(
+                [task.cycles_per_bit for task in all_tasks], percentile
+            ),
+            execution_time=_percentile_scale(
+                [task.exec_time for task in all_tasks], percentile
+            ),
+            deadline_budget=deadline_scale,
+            task_power=_percentile_scale(
+                [task.power for task in all_tasks], percentile
+            ),
+            fog_distance=_percentile_scale(fog_distances, percentile),
+            network_load=_percentile_scale(
+                network_load_values, percentile
+            ),
+            queue_wait=2.0 * deadline_scale,
+            remaining_tasks=_percentile_scale(
+                network_load_values, percentile
+            ),
+            remaining_compute=_percentile_scale(
+                compute_values, percentile
+            ),
+            remaining_data=_percentile_scale(
+                data_values, percentile
+            ),
+        )
+
+
+def _vehicle_for_task(
+    task: TaskRecord,
+    states: Mapping[str | tuple[float, str], VehicleState],
+) -> VehicleState:
+    vehicle = states.get((task.release_time, task.creator))
+    if vehicle is None:
+        vehicle = states.get(task.creator)
+    if vehicle is None:
+        raise KeyError(
+            f"No vehicle state for task {task.id!r} "
+            f"(creator={task.creator!r}, release={task.release_time})"
+        )
+    return vehicle
+
+
+class VECOffloadingEnv(gym.Env[np.ndarray, int]):
+    """Single-task environment with categorical LOCAL, FOG, and CLOUD actions."""
 
     metadata = {"render_modes": []}
     observation_fields = (
@@ -148,32 +194,27 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
         "weather_rain",
         "weather_snow",
         "weather_fog",
-        "vehicle_speed",
-        "task_execution_time",
         "task_data_size",
         "cycles_per_bit",
-        "deadline_slack",
-        "path_loss_increase",
-        "fog_packet_loss_probability",
-        "cloud_packet_loss_probability",
-        "nearest_fog_distance",
+        "local_execution_time",
+        "deadline_budget",
         "task_power",
+        "nearest_fog_distance",
+        "fog_terminal_loss_probability",
+        "cloud_terminal_loss_probability",
         "network_load",
-        "local_queue_occupancy",
-        "fog_queue_occupancy",
-        "cloud_queue_occupancy",
-        "local_available_capacity",
-        "fog_available_capacity",
-        "cloud_available_capacity",
+        "local_estimated_wait",
+        "fog_estimated_wait",
+        "cloud_estimated_wait",
+        "remaining_tasks",
+        "remaining_compute_demand",
+        "remaining_data_volume",
     )
 
     def __init__(
         self,
         tasks: Sequence[TaskRecord],
-        vehicle_states: Mapping[
-            str | tuple[float, str],
-            VehicleState,
-        ],
+        vehicle_states: Mapping[str | tuple[float, str], VehicleState],
         *,
         execution_model: ExecutionModel | None = None,
         resource_capacities: ResourceCapacities | None = None,
@@ -187,30 +228,30 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
         self.tasks = tuple(
             sorted(
                 tasks,
-                key=lambda task: (
-                    task.release_time,
-                    task.deadline,
-                    task.id,
-                ),
+                key=lambda task: (task.release_time, task.deadline, task.id),
             )
         )
         self.vehicle_states = vehicle_states
         self.execution_model = execution_model or ExecutionModel()
         self.resource_capacities = resource_capacities or ResourceCapacities()
         self.reward_config = reward_config or RewardConfig()
-        self.observation_scale = observation_scale or ObservationScale()
+        self.observation_scale = observation_scale or ObservationScale.from_data(
+            self.tasks,
+            self.vehicle_states,
+        )
         self.network_load_by_time = Counter(
             task.release_time for task in self.tasks
         )
+        self.fog_nodes_by_time = mobile_fog_nodes_by_time(self.vehicle_states)
+        self._remaining_tasks = np.zeros(len(self.tasks), dtype=np.float32)
+        self._remaining_compute = np.zeros(len(self.tasks), dtype=np.float32)
+        self._remaining_data = np.zeros(len(self.tasks), dtype=np.float32)
+        self._prepare_remaining_batch_features()
 
         for task in self.tasks:
-            self._vehicle_for_task(task)
+            _vehicle_for_task(task, self.vehicle_states)
 
-        self.action_space = spaces.Box(
-            low=np.array([-1.0], dtype=np.float32),
-            high=np.array([1.0], dtype=np.float32),
-            dtype=np.float32,
-        )
+        self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(
             low=0.0,
             high=1.0,
@@ -234,112 +275,138 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
             **kwargs,
         )
 
-    def _vehicle_for_task(self, task: TaskRecord) -> VehicleState:
-        vehicle = self.vehicle_states.get(
-            (task.release_time, task.creator)
-        )
-        if vehicle is None:
-            vehicle = self.vehicle_states.get(task.creator)
-        if vehicle is None:
-            raise KeyError(
-                f"No vehicle state for task {task.id!r} "
-                f"(creator={task.creator!r}, release={task.release_time})"
-            )
-        return vehicle
+    def _prepare_remaining_batch_features(self) -> None:
+        start = 0
+        while start < len(self.tasks):
+            end = start + 1
+            release_time = self.tasks[start].release_time
+            while (
+                end < len(self.tasks)
+                and self.tasks[end].release_time == release_time
+            ):
+                end += 1
+            compute = 0.0
+            data = 0.0
+            for index in range(end - 1, start - 1, -1):
+                compute += self.tasks[index].exec_time
+                data += self.tasks[index].data_size
+                self._remaining_tasks[index] = end - index
+                self._remaining_compute[index] = compute
+                self._remaining_data[index] = data
+            start = end
 
     @staticmethod
-    def action_to_target(action: np.ndarray | Sequence[float]) -> OffloadTarget:
-        values = np.asarray(action, dtype=np.float32).reshape(-1)
-        if values.size != 1 or not np.isfinite(values[0]):
-            raise ValueError("action must contain one finite scalar")
-        value = float(np.clip(values[0], -1.0, 1.0))
-        if value < -1.0 / 3.0:
-            return OffloadTarget.LOCAL
-        if value < 1.0 / 3.0:
-            return OffloadTarget.FOG
-        return OffloadTarget.CLOUD
+    def action_to_target(action: int | np.integer) -> OffloadTarget:
+        try:
+            index = int(action)
+        except (TypeError, ValueError) as error:
+            raise ValueError("action must be an integer in {0, 1, 2}") from error
+        targets = tuple(OffloadTarget)
+        if index < 0 or index >= len(targets):
+            raise ValueError("action must be an integer in {0, 1, 2}")
+        return targets[index]
+
+    @staticmethod
+    def target_to_action(target: OffloadTarget | str) -> int:
+        normalized = OffloadTarget(target)
+        return tuple(OffloadTarget).index(normalized)
 
     @staticmethod
     def _scaled(value: float, maximum: float) -> float:
         return float(np.clip(value / maximum, 0.0, 1.0))
 
+    def _fog_for_task(self, task: TaskRecord, vehicle: VehicleState):
+        fog_nodes = self.fog_nodes_by_time.get(
+            task.release_time,
+            DEFAULT_FOG_NODES,
+        )
+        return nearest_fog(vehicle, fog_nodes)
+
+    def _estimated_waits(
+        self,
+        task: TaskRecord,
+        vehicle: VehicleState,
+    ) -> tuple[float, float, float, float]:
+        model = self.execution_model
+        capacities = self.resource_capacities
+        fog = self._fog_for_task(task, vehicle)
+        fog_distance = distance(vehicle.x, vehicle.y, fog.x, fog.y)
+        fog_arrival = (
+            task.release_time
+            + task.data_size / model.fog_bandwidth
+            + fog_distance * model.fog_distance_delay_factor
+        )
+        cloud_arrival = (
+            task.release_time
+            + task.data_size / model.cloud_bandwidth
+            + dynamic_backhaul_delay(
+                task.weather_scenario,
+                self.network_load_by_time[task.release_time],
+                model,
+            )
+        )
+        local_wait = self._resource_state.estimated_wait(
+            f"LOCAL:{task.creator}", capacities, task.release_time
+        )
+        fog_wait = self._resource_state.estimated_wait(
+            f"FOG:{fog.id}", capacities, fog_arrival
+        )
+        cloud_wait = self._resource_state.estimated_wait(
+            "CLOUD", capacities, cloud_arrival
+        )
+        return local_wait, fog_wait, cloud_wait, fog_distance
+
     def _observation(self, index: int) -> np.ndarray:
         task = self.tasks[index]
-        vehicle = self._vehicle_for_task(task)
-        fog = nearest_fog(vehicle, DEFAULT_FOG_NODES)
+        vehicle = _vehicle_for_task(task, self.vehicle_states)
         scenario = normalize_scenario(task.weather_scenario)
         weather_one_hot = [
-            float(scenario == candidate)
-            for candidate in WeatherScenario
+            float(scenario == candidate) for candidate in WeatherScenario
         ]
-        local_occupancy, local_available = self._resource_state.capacity_status(
-            f"LOCAL:{task.creator}",
-            self.resource_capacities,
-            task.release_time,
+        local_wait, fog_wait, cloud_wait, fog_distance = self._estimated_waits(
+            task,
+            vehicle,
         )
-        fog_occupancy, fog_available = self._resource_state.capacity_status(
-            f"FOG:{fog.id}",
-            self.resource_capacities,
-            task.release_time,
+        model = self.execution_model
+        max_attempts = 1 + model.max_retransmissions
+        fog_per_attempt = np.clip(
+            (model.fog_base_packet_loss_percent + task.plr_increase_percent)
+            / 100.0,
+            0.0,
+            1.0,
         )
-        cloud_occupancy, cloud_available = self._resource_state.capacity_status(
-            "CLOUD",
-            self.resource_capacities,
-            task.release_time,
+        cloud_per_attempt = np.clip(
+            (model.cloud_base_packet_loss_percent + task.plr_increase_percent)
+            / 100.0,
+            0.0,
+            1.0,
         )
         scale = self.observation_scale
-        deadline_slack = max(task.deadline - task.release_time, 0.0)
-        fog_packet_loss = np.clip(
-            (
-                self.execution_model.fog_base_packet_loss_percent
-                + task.plr_increase_percent
-            )
-            / 100.0,
-            0.0,
-            1.0,
-        )
-        cloud_packet_loss = np.clip(
-            (
-                self.execution_model.cloud_base_packet_loss_percent
-                + task.plr_increase_percent
-            )
-            / 100.0,
-            0.0,
-            1.0,
-        )
+        deadline_budget = max(task.deadline - task.release_time, 1e-6)
 
         return np.asarray(
             [
                 *weather_one_hot,
-                self._scaled(vehicle.speed, scale.speed),
-                self._scaled(task.exec_time, scale.execution_time),
                 self._scaled(task.data_size, scale.data_size),
-                self._scaled(
-                    task.cycles_per_bit,
-                    scale.cycles_per_bit,
-                ),
-                self._scaled(deadline_slack, scale.deadline_slack),
-                self._scaled(
-                    task.path_loss_increase_db,
-                    scale.path_loss_db,
-                ),
-                fog_packet_loss,
-                cloud_packet_loss,
-                self._scaled(
-                    distance(vehicle.x, vehicle.y, fog.x, fog.y),
-                    scale.fog_distance,
-                ),
+                self._scaled(task.cycles_per_bit, scale.cycles_per_bit),
+                self._scaled(task.exec_time, scale.execution_time),
+                self._scaled(deadline_budget, scale.deadline_budget),
                 self._scaled(task.power, scale.task_power),
+                self._scaled(fog_distance, scale.fog_distance),
+                float(fog_per_attempt**max_attempts),
+                float(cloud_per_attempt**max_attempts),
                 self._scaled(
                     self.network_load_by_time[task.release_time],
                     scale.network_load,
                 ),
-                local_occupancy,
-                fog_occupancy,
-                cloud_occupancy,
-                local_available,
-                fog_available,
-                cloud_available,
+                self._scaled(local_wait, scale.queue_wait),
+                self._scaled(fog_wait, scale.queue_wait),
+                self._scaled(cloud_wait, scale.queue_wait),
+                self._scaled(self._remaining_tasks[index], scale.remaining_tasks),
+                self._scaled(
+                    self._remaining_compute[index], scale.remaining_compute
+                ),
+                self._scaled(self._remaining_data[index], scale.remaining_data),
             ],
             dtype=np.float32,
         )
@@ -358,6 +425,7 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
             model=self.execution_model,
             capacities=self.resource_capacities,
             network_load_by_time=self.network_load_by_time,
+            fog_nodes_by_time=self.fog_nodes_by_time,
         )[0]
 
     def _reward(
@@ -365,43 +433,46 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
         task: TaskRecord,
         outcome: AssignmentResult,
     ) -> tuple[float, dict[str, float | bool | str]]:
-        available_time = max(
-            task.deadline - task.release_time,
-            1e-9,
-        )
-        total_energy = outcome.total_system_energy
+        config = self.reward_config
+        deadline_budget = max(task.deadline - task.release_time, 1e-6)
         local_energy_reference = max(
             task.power
             * task.exec_time
             / self.execution_model.local_speedup,
-            1e-9,
+            1e-6,
         )
-        normalized_latency = outcome.latency / available_time
-        normalized_energy = total_energy / local_energy_reference
-        reliability_risk = float(
-            np.clip(outcome.final_failure_probability, 0.0, 1.0)
+        max_attempts = 1 + self.execution_model.max_retransmissions
+        max_terminal_loss = config.max_per_attempt_loss**max_attempts
+        loss_cost = min(
+            outcome.final_failure_probability / max(max_terminal_loss, 1e-6),
+            1.0,
         )
-        deadline_missed = outcome.deadline_missed
-        profile = self.reward_config.for_weather(task.weather_scenario)
-        cost = (
-            profile.latency_weight * normalized_latency
-            + profile.energy_weight * normalized_energy
-            + profile.reliability_weight * reliability_risk
-            + profile.packet_loss_penalty * float(outcome.packet_lost)
-            + profile.deadline_miss_penalty * float(deadline_missed)
+        if outcome.packet_lost:
+            loss_cost = 1.0
+        latency_ratio = outcome.latency / deadline_budget
+        latency_cost = min(latency_ratio, config.ratio_cap) / config.ratio_cap
+        energy_ratio = outcome.total_system_energy / local_energy_reference
+        energy_cost = min(energy_ratio, config.ratio_cap) / config.ratio_cap
+        reward = -(
+            config.loss_weight * loss_cost
+            + config.latency_weight * latency_cost
+            + config.energy_weight * energy_cost
         )
-        return -cost, {
-            "normalized_latency": normalized_latency,
-            "normalized_energy": normalized_energy,
-            "reliability_risk": reliability_risk,
-            "deadline_missed": deadline_missed,
-            "total_system_energy": total_energy,
-            "reward_profile": self.reward_config.name,
-            "latency_weight": profile.latency_weight,
-            "energy_weight": profile.energy_weight,
-            "reliability_weight": profile.reliability_weight,
-            "packet_loss_penalty": profile.packet_loss_penalty,
-            "deadline_miss_penalty": profile.deadline_miss_penalty,
+        return reward, {
+            "loss_cost": loss_cost,
+            "latency_ratio": latency_ratio,
+            "latency_cost": latency_cost,
+            "energy_ratio": energy_ratio,
+            "energy_cost": energy_cost,
+            "normalized_latency": latency_ratio,
+            "normalized_energy": energy_ratio,
+            "reliability_risk": outcome.final_failure_probability,
+            "deadline_missed": outcome.deadline_missed,
+            "total_system_energy": outcome.total_system_energy,
+            "reward_profile": "fixed_bounded",
+            "loss_weight": config.loss_weight,
+            "latency_weight": config.latency_weight,
+            "energy_weight": config.energy_weight,
         }
 
     def reset(
@@ -419,13 +490,11 @@ class VECOffloadingEnv(gym.Env[np.ndarray, np.ndarray]):
         )
         self._channel = DeterministicChannel(seed=channel_seed)
         self._resource_state = ResourceState()
-        return self._observation(self._index), {
-            "task_id": self.tasks[self._index].id,
-        }
+        return self._observation(0), {"task_id": self.tasks[0].id}
 
     def step(
         self,
-        action: np.ndarray,
+        action: int | np.integer,
     ) -> tuple[np.ndarray, float, bool, bool, dict]:
         if self._index is None:
             raise RuntimeError("reset() must be called before step()")

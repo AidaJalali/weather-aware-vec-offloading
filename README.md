@@ -1,310 +1,215 @@
 # weather-aware-vec-offloading
 
-Weather-aware adaptive task offloading in Vehicular Edge Computing (VEC) using Soft Actor-Critic (SAC) deep reinforcement learning.
+Weather-aware task offloading in Vehicular Edge Computing using Random,
+GeneticBatch, and categorical Soft Actor-Critic (SAC) controllers.
 
-## Quick start
+## Setup
 
 ```bash
-# Create environment and install dependencies
 uv venv .venv
 uv pip install --python .venv/bin/python -r dependencies/requirements.txt
 
-# Run the full Phase 1 pipeline (120-second SUMO simulation)
-PYTHONPATH=src .venv/bin/python src/run_phase1_pipeline.py --duration 120
-
-# Run tests
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src:. .venv/bin/python -m unittest discover -s tests -v
 ```
 
-## Data generation with SUMO
+## Dataset pipeline
 
-Mobility data is generated using SUMO via TraCI. The pipeline creates a grid road
-network, simulates vehicle movement with realistic dynamics, applies weather effects
-inside the simulation, and generates offloading tasks.
+SUMO and TraCI generate vehicle mobility. The task generator then applies the
+weather table for BASE, RAIN, SNOW, and FOG. Weather changes vehicle speed, task
+rate, compute demand, deadline type, and packet-loss-rate increase. Path loss is
+not generated or used; table-driven packet loss is the communication model.
 
-### Dataset structure
+Weather-reduced speed is compared with a weather-adjusted speed threshold, so a
+normal FOG vehicle is not incorrectly classified as traffic congestion.
 
-Every active dataset contains exactly 1,000 simulation timesteps and has a name
-starting with its category:
+Every active dataset contains 1,000 simulation timesteps:
 
-```
+```text
 data/datasets/
-├── train/
-│   ├── train_base_1 ... train_fog_2       # 8 static
-│   └── train_slow_mix_1 ... _4            # 4 x 250-second blocks
-├── finetune/
-│   ├── finetune_base ... finetune_fog     # 4 static
-│   ├── finetune_slow_mix_1 ... _2
-│   └── finetune_fast_mix_1 ... _2
-└── test/
-    ├── test_base, test_rain, test_snow, test_fog
-    ├── test_fast_mix
-    ├── test_slow_mix
-    └── test_random_mix_1, test_random_mix_2
+  train/       8 static + 4 slow-mixed datasets
+  finetune/    4 static + 2 slow-mixed + 2 fast-mixed datasets
+  test/        4 static + fast, slow, and 2 random-mixed datasets
 ```
 
-The 12 train datasets are used only for initial SAC training. The 8 finetune
-datasets use unseen seeds for online adaptation and selecting fallback settings.
-The 8 test datasets remain untouched until final comparison. In each random-mix
-test, weather blocks have reproducible random durations between 100 and 200 steps.
-
-Inspect the complete plan without running SUMO:
+Inspect the generation plan:
 
 ```bash
 PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py --dry-run
 ```
 
-Generate missing datasets in one category, or all categories:
+The congestion correction changes task counts, so regenerate every active dataset
+before evaluating or training:
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py --group train
-PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py --group finetune
-PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py --group test
-PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py --group all
+PYTHONPATH=src .venv/bin/python scripts/generate_sac_curriculum.py \
+  --group all --overwrite
 ```
 
-Complete datasets are skipped. Replacing them requires explicit `--overwrite`.
-The former 3,600-step datasets remain locally under `data/sumo`, but are ignored by
-Git and are not used by the active training or evaluation code.
-
-Key modules:
-
-| Module | Role |
-|--------|------|
-| `src/sumo_pipeline.py` | SUMO network, route generation, TraCI orchestration |
-| `src/task_generation.py` | Deterministic seeded task-parameter generation |
-| `src/xml_dataset_writer.py` | Chunk-buffered vehicle/task XML writer |
-| `src/weather_scenarios.py` | Weather scenario definitions and effects |
-| `src/weather_scenario_generator.py` | Weather schedule CSV generator |
-| `scripts/generate_sac_curriculum.py` | Generate all train/finetune/test datasets |
-
-## Genetic fallback for Phase 2
-
-`GeneticBatchOffloader` implements the time-bounded, weather-aware fallback
-described by Solution 3. A chromosome contains one `LOCAL`, `FOG`, or `CLOUD`
-assignment per task. Its fitness accounts for:
-
-- dynamic latency and total system energy;
-- weather-related packet-loss and final-transmission-failure risk;
-- persistent per-vehicle, Fog, and Cloud queue contention;
-- expected deadline failures and total lateness.
-
-GA ranks chromosomes by expected task failures first. This combines final packet
-failure probability with successful executions expected to miss their deadlines.
-Expected packet failures are the next explicit criterion, followed by weighted
-normalized latency and total system energy.
-
-Random, GeneticBatch, and SAC produce only target assignments. The shared
-`src/offloading_simulator.py` executes those assignments with the same capacities,
-deterministic packet samples, retransmissions, energy equations, and dynamic Cloud
-backhaul model.
-
-The optimizer always retains its best chromosome and stops after either the configured
-generation count or wall-clock limit:
-
-```python
-from algorithms import GeneticBatchOffloader, GeneticOffloaderConfig
-
-fallback = GeneticBatchOffloader(
-    GeneticOffloaderConfig(
-        population_size=32,
-        max_generations=25,
-        time_limit_seconds=0.15,
-    )
-)
-result = fallback.optimize(tasks, vehicle_states)
-assignments = result.by_task_id(tasks)
-```
-
-`RLGeneticFallbackController` adds reward-window detection and hysteresis. It uses
-the RL policy normally, switches to the GA after sustained low reward, and returns
-after sustained recovery. SAC experience collection and fine-tuning remain the
-responsibility of the training loop and should continue while the GA is active.
-
-Run the focused tests with:
+Check the offered load against Local, mobile-Fog, and Cloud capacity:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src .venv/bin/python src/analyze_workload.py --split train
+PYTHONPATH=src .venv/bin/python src/analyze_workload.py --split test
 ```
 
-## Gymnasium environment for SAC
+The report includes tasks/s, required local-compute seconds/s, average users and
+mobile Fog nodes, and lower-bound resource utilization. After an evaluation, add
+`--results-file PATH` to estimate queue-delay growth by weather.
 
-`VECOffloadingEnv` processes one generated task per environment step and delegates
-execution to the same Local, Fog, and Cloud functions used by the random baseline.
-This keeps energy, retransmission, packet-loss, deadline, and dynamic backhaul
-behavior consistent between baseline evaluation and reinforcement learning.
+## Shared simulator
 
-Stable-Baselines3 SAC requires a continuous action space. The environment maps its
-single scalar action as follows:
+All controllers only choose `LOCAL`, `FOG`, or `CLOUD`. The shared simulator owns:
 
-| SAC action | Offloading target |
-|---|---|
-| `[-1.0, -1/3)` | Local |
-| `[-1/3, 1/3)` | Fog |
-| `[1/3, 1.0]` | Cloud |
+- persistent Local, mobile-Fog, and Cloud queues;
+- the same resource capacities for every algorithm;
+- deterministic packet samples, two retries, and retry latency;
+- vehicle transmission and infrastructure compute energy;
+- dynamic Cloud backhaul from weather and network load;
+- packet loss, deadline misses, latency, and total system energy.
 
-Create the environment directly from generated XML:
+Mobile `LKW_special` vehicles are Fog nodes at their actual position each timestep.
+The three fixed Fog positions are used only when a dataset has no mobile Fog state.
 
-```python
-from vec_offloading_env import VECOffloadingEnv
+## Discrete SAC environment
 
-env = VECOffloadingEnv.from_xml(
-    tasks_file="data/datasets/test/test_base/tasks/chunk_0.xml.gz",
-    vehicles_file="data/datasets/test/test_base/vehicles/chunk_0.xml.gz",
-)
-observation, info = env.reset(seed=37)
-```
+The action space is categorical:
 
-The observation is a 21-value normalized vector containing weather, vehicle speed,
-task properties, deadline slack, path loss, Fog/Cloud packet-loss probabilities,
-nearest-Fog distance, current task-generation load, and Local/Fog/Cloud queue and
-capacity state.
+| Action | Target |
+|---:|---|
+| 0 | Local |
+| 1 | Fog |
+| 2 | Cloud |
 
-### Weather-adaptive reward
+The 19-value observation contains weather one-hot values, task data and compute
+demand, deadline budget, task power, nearest-Fog distance, Fog/Cloud terminal loss
+risk, network load, three estimated queue waits, and the remaining task count,
+compute demand, and data volume in the current timestep. Numeric scales are the
+99th percentiles derived only from pretraining data and are stored in the model.
 
-The default `RewardConfig()` preserves one fixed reward profile for every scenario.
-`RewardConfig.adaptive_default()` selects configurable weights by weather:
-
-| Scenario | Latency | Energy | Reliability | Packet-loss penalty | Deadline penalty |
-|---|---:|---:|---:|---:|---:|
-| Base | 0.35 | 0.25 | 0.15 | 2.0 | 5.0 |
-| Rain | 0.40 | 0.20 | 0.25 | 2.5 | 6.0 |
-| Snow | 0.45 | 0.20 | 0.15 | 2.0 | 7.0 |
-| Fog | 0.30 | 0.20 | 0.35 | 3.0 | 5.0 |
-
-These are initial experimental values, not final calibrated coefficients. Custom
-profiles can be passed with `RewardConfig(weather_profiles={...})`.
-
-Compare fixed and adaptive reward shaping on the exact same actions and packet-loss
-samples:
-
-```bash
-PYTHONPATH=src .venv/bin/python src/compare_reward_profiles.py \
-  --tasks data/datasets/finetune/finetune_base/tasks/chunk_0.xml.gz \
-  --vehicles data/datasets/finetune/finetune_base/vehicles/chunk_0.xml.gz \
-  --target FOG \
-  --output outputs/reward_profile_comparison.csv
-```
-
-This controlled replay verifies how reward shaping changes evaluation. It does not
-prove that one policy is better: the final experiment must train separate SAC models
-with fixed and adaptive rewards, then evaluate both models on common held-out seeds.
-
-## Staged SAC pretraining
-
-The SAC state uses weather one-hot values, task and network characteristics,
-Fog/Cloud packet-loss probabilities, and Local/Fog/Cloud queue occupancy and
-available capacity. One small SAC model is trained continuously in this order:
+The fixed bounded reward is:
 
 ```text
-8 static datasets -> 4 slow mixed datasets
+reward = -(0.50 * loss_cost + 0.35 * latency_cost + 0.15 * energy_cost)
 ```
 
-Start the complete curriculum after generating the data:
+Each cost is clipped to `[0, 1]`; reward is therefore in `[-1, 0]`. Latency already
+contains queue delay, so queue delay is visible in the state but is not counted a
+second time in the reward. Energy uses `total_system_energy`.
+
+## SAC pretraining
+
+`src/discrete_sac.py` implements a small categorical SAC actor with twin critics.
+The default training protocol uses:
+
+- a `64 x 64` network;
+- 10 epochs over the 12 pretraining datasets;
+- shuffled dataset order each epoch and temporal order within each dataset;
+- a 500,000-transition weather-balanced replay buffer;
+- random balanced minibatches and `gamma=0.995`;
+- validation after every training dataset on ordered 300-timestep finetune
+  slices, which include weather changes in slow and fast mixed datasets;
+- best-checkpoint selection by bounded validation reward, with every finetune
+  dataset weighted equally regardless of its task count.
+
+Train it with:
 
 ```bash
 PYTHONPATH=src .venv/bin/python src/train_sac.py
 ```
 
-The model uses a two-layer `64 x 64` policy and a bounded replay buffer. Cumulative
-checkpoints are saved after datasets 4, 8, and 12 under
-`outputs/models/sac/checkpoints/`. The final model is written to
-`outputs/models/sac/sac_pretrained_final.zip`. These are conservative resource
-settings, not tuned final hyperparameters.
+Outputs:
 
-For a short pipeline check before a full training run:
-
-```bash
-PYTHONPATH=src .venv/bin/python src/train_sac.py --steps-per-dataset 100
+```text
+outputs/models/discrete_sac/sac_discrete_best.pt
+outputs/models/discrete_sac/sac_discrete_final.pt
+outputs/models/discrete_sac/checkpoints/epoch_02.pt
+outputs/models/discrete_sac/checkpoints/epoch_04.pt
+outputs/models/discrete_sac/checkpoints/epoch_06.pt
+outputs/models/discrete_sac/checkpoints/epoch_08.pt
+outputs/models/discrete_sac/checkpoints/epoch_10.pt
+outputs/models/discrete_sac/validation_history.csv
 ```
 
-The current environment makes one SAC transition per task. Tasks released in the
-same SUMO timestep are handled sequentially while sharing the same persistent queue
-state.
+For a short code-path check, not a meaningful model:
 
-## Online SAC with GeneticBatch fallback
+```bash
+PYTHONPATH=src .venv/bin/python src/train_sac.py \
+  --epochs 1 --steps-per-dataset 100 --validation-timesteps 5 \
+  --output-dir /tmp/vec-sac-smoke
+```
 
-`src/online_hybrid.py` loads the pretrained SAC and monitors a rolling transmission-
-loss event rate. A loss event means that a task needed at least one retransmission or
-ultimately lost its packet. The controller switches from SAC to GeneticBatch after
-sustained high loss and returns to SAC after sustained recovery. Separate enter and
-exit thresholds provide hysteresis.
+The former continuous Stable-Baselines3 SAC checkpoints are incompatible with the
+new discrete action and 19-field observation spaces.
 
-The eight test datasets run sequentially in this order: BASE, RAIN, SNOW, FOG,
-FAST_MIXED, SLOW_MIXED, RANDOM_MIX_1, and RANDOM_MIX_2. SAC is deterministic and
-frozen during normal control. During fallback, GeneticBatch controls the executed
-assignments and SAC fine-tunes from those actual GA actions, rewards, and next
-observations. When GA releases control, SAC becomes frozen again. The adapted model
-and cumulative CSV logs are saved after each completed dataset. They use one stable
-output path, so pretraining is never overwritten and extra checkpoints are not made.
+## Evaluation
 
-Run the complete online test protocol from the pretrained model:
+Regenerate data first, then rerun every controller so all comparisons use the same
+corrected workload:
+
+```bash
+PYTHONPATH=src .venv/bin/python src/evaluation.py --algorithm both
+PYTHONPATH=src .venv/bin/python src/evaluation.py --algorithm sac_pretrained
+
+# Or run all three in one command:
+PYTHONPATH=src .venv/bin/python src/evaluation.py --algorithm all
+```
+
+`notebooks/evaluation.ipynb` plots deadline misses, packet losses, average latency,
+and average total-system energy. `notebooks/weather_dataset_new.ipynb` inspects the
+weather schedules.
+
+## Online SAC and GA fallback
+
+The online stream begins with frozen deterministic SAC. A rolling monitor checks:
+
+- transmission loss events, including retries;
+- deadline-miss rate;
+- normalized latency (`latency / deadline budget`).
+
+Two consecutive bad checks switch control to GeneticBatch. Only while GA controls
+the tasks are its transitions collected and SAC updated. Recovery requires all
+three metrics to stay below their lower recovery thresholds for two checks and at
+least 100 fallback tasks. The pretrained model is never overwritten.
+
+Run the ordered test stream:
 
 ```bash
 PYTHONPATH=src .venv/bin/python src/online_hybrid.py --split test
 ```
 
-This writes:
+Outputs:
 
 ```text
-outputs/models/sac_online/sac_adapted_final.zip
+outputs/models/discrete_sac_online/sac_adapted_final.pt
 outputs/online/test_hybrid_results.csv
 outputs/online/test_hybrid_switches.csv
 ```
 
-For a shorter run on one test stream while keeping the same conditional fine-tuning
-logic:
+Run one short stream or disable adaptation for diagnosis:
 
 ```bash
 PYTHONPATH=src .venv/bin/python src/online_hybrid.py \
-  --split test \
-  --dataset test_slow_mix \
-  --results-file outputs/online/test_stream_results.csv \
-  --switch-file outputs/online/test_stream_switches.csv
+  --split test --dataset test_slow_mix --max-timesteps 400
+
+PYTHONPATH=src .venv/bin/python src/online_hybrid.py \
+  --split test --dataset test_slow_mix --no-train
 ```
 
-The monitor defaults are a 100-task window, checks every 20 tasks, 5% fallback
-threshold, 2% recovery threshold, two consecutive checks, and at least 100 GA tasks
-before recovery. These are initial experiment settings rather than tuned values.
-Use `notebooks/online_hybrid_evaluation.ipynb` to inspect switch timing and compare
-the rolling loss, reward, latency, energy, and cumulative failure curves. Passing
-`--no-train` disables even fallback fine-tuning and provides a fully frozen diagnostic
-run. Because the normal protocol adapts while evaluating the stream, report its
-results as online or prequential evaluation.
+The default thresholds are starting values, not selected hyperparameters. Use
+`notebooks/online_hybrid_evaluation.ipynb` to inspect each switch and all three
+rolling monitor signals before choosing final thresholds on finetune data.
 
-### Frozen pretrained evaluation
+## Key modules
 
-Evaluate the saved pretrained policy on the eight 1,000-timestep test datasets using
-the same simulator as Random and GeneticBatch:
-
-```bash
-PYTHONPATH=src .venv/bin/python src/evaluation.py \
-  --algorithm sac_pretrained
-```
-
-This loads `outputs/models/sac/sac_pretrained_final.zip`, selects deterministic SAC
-actions, and does not train or modify the model. Detailed results and the eight-dataset
-summary are saved under `outputs/evaluation/sac_pretrained/`.
-
-Run all three algorithms for a complete notebook comparison with:
-
-```bash
-PYTHONPATH=src .venv/bin/python src/evaluation.py --algorithm all
-```
-
-Use `notebooks/weather_dataset_new.ipynb` to inspect the new data and
-`notebooks/evaluation.ipynb` to plot the evaluation summaries.
-
-## SUMO and TraCI setup
-
-Verify SUMO/TraCI connectivity:
-
-```bash
-.venv/bin/python src/sumo_traci_smoke_test.py
-```
-
-The test creates a temporary road network and vehicle, advances SUMO one step at a
-time, and prints vehicle position and speed. It does not modify project data.
+| Module | Role |
+|---|---|
+| `src/task_generation.py` | Weather-aware seeded task generation |
+| `src/offloading_simulator.py` | Shared queues, communication, execution, energy |
+| `src/algorithms.py` | Random and GeneticBatch target selection |
+| `src/vec_offloading_env.py` | Discrete action, observation, bounded reward |
+| `src/discrete_sac.py` | Categorical SAC and balanced replay |
+| `src/train_sac.py` | Multi-epoch shuffled pretraining and validation |
+| `src/online_hybrid.py` | Frozen SAC, monitored GA fallback, online updates |
 
 ## Supervision
 

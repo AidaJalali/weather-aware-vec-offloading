@@ -5,6 +5,7 @@ import math
 import xml.etree.ElementTree as Et
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class VehicleState:
     y: float
     speed: float
     weather_scenario: str
+    vehicle_type: str = "PKW_special"
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,6 @@ class TaskRecord:
     data_size: float
     weather_scenario: str
     deadline_type: str
-    path_loss_increase_db: float
     plr_increase_percent: float
 
 
@@ -86,6 +87,22 @@ def nearest_fog(vehicle: VehicleState, fog_nodes=DEFAULT_FOG_NODES) -> FogNode:
     )
 
 
+def mobile_fog_nodes_by_time(
+    states: dict | Mapping,
+) -> dict[float, tuple[FogNode, ...]]:
+    grouped: dict[float, list[FogNode]] = {}
+    for key, state in states.items():
+        if not isinstance(key, tuple) or state.vehicle_type != "LKW_special":
+            continue
+        grouped.setdefault(float(state.time), []).append(
+            FogNode(id=state.id, x=state.x, y=state.y)
+        )
+    return {
+        timestep: tuple(sorted(nodes, key=lambda node: node.id))
+        for timestep, nodes in grouped.items()
+    }
+
+
 def dynamic_backhaul_delay(
     scenario: str,
     network_load: int,
@@ -131,6 +148,7 @@ def load_vehicle_states(path: str | Path) -> dict[tuple[float, str], VehicleStat
                 y=float(vehicle.get("y")),
                 speed=float(vehicle.get("speed")),
                 weather_scenario=vehicle.get("weather_scenario", "BASE"),
+                vehicle_type=vehicle.get("type", "PKW_special"),
             )
     return states
 
@@ -154,7 +172,6 @@ def load_tasks(path: str | Path) -> list[TaskRecord]:
                     data_size=float(task.get("dataSize")),
                     weather_scenario=task.get("weather_scenario", "BASE"),
                     deadline_type=task.get("deadline_type", "Normal"),
-                    path_loss_increase_db=float(task.get("path_loss_increase_db", 0.0)),
                     plr_increase_percent=float(task.get("plr_increase_percent", 0.0)),
                 )
             )

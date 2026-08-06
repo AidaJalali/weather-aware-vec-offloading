@@ -13,7 +13,6 @@ python-dateutil==2.9.0.post0
 six==1.17.0
 eclipse-sumo==1.27.1
 gymnasium==1.2.3
-stable-baselines3==2.7.1
 sumolib==1.27.1
 torch==2.13.0+cpu
 traci==1.27.1

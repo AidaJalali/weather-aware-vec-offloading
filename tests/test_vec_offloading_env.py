@@ -6,13 +6,8 @@ import numpy as np
 from gymnasium.utils.env_checker import check_env
 
 from algorithms import OffloadTarget
-from compare_reward_profiles import compare_fixed_and_adaptive
 from infrastructure import ExecutionModel, TaskRecord, VehicleState
-from vec_offloading_env import (
-    RewardConfig,
-    RewardProfile,
-    VECOffloadingEnv,
-)
+from vec_offloading_env import RewardConfig, VECOffloadingEnv
 
 
 def make_task(
@@ -32,7 +27,6 @@ def make_task(
         data_size=0.5,
         weather_scenario=scenario,
         deadline_type="Normal",
-        path_loss_increase_db=0.0,
         plr_increase_percent=0.0,
     )
 
@@ -53,84 +47,74 @@ def make_vehicle(
 
 
 class VECOffloadingEnvTests(unittest.TestCase):
-    def test_action_regions_map_to_offloading_targets(self) -> None:
-        self.assertEqual(
-            VECOffloadingEnv.action_to_target(np.array([-1.0])),
-            OffloadTarget.LOCAL,
-        )
-        self.assertEqual(
-            VECOffloadingEnv.action_to_target(np.array([0.0])),
-            OffloadTarget.FOG,
-        )
-        self.assertEqual(
-            VECOffloadingEnv.action_to_target(np.array([1.0])),
-            OffloadTarget.CLOUD,
-        )
+    def test_discrete_actions_map_to_targets(self) -> None:
+        self.assertEqual(VECOffloadingEnv.action_to_target(0), OffloadTarget.LOCAL)
+        self.assertEqual(VECOffloadingEnv.action_to_target(1), OffloadTarget.FOG)
+        self.assertEqual(VECOffloadingEnv.action_to_target(2), OffloadTarget.CLOUD)
+        for target in OffloadTarget:
+            self.assertEqual(
+                VECOffloadingEnv.action_to_target(
+                    VECOffloadingEnv.target_to_action(target)
+                ),
+                target,
+            )
 
-    def test_observation_contains_weather_loss_queue_and_capacity_state(self) -> None:
+    def test_observation_contains_loss_wait_and_remaining_batch_state(self) -> None:
         first = TaskRecord(
             **{
                 **make_task("first", scenario="RAIN").__dict__,
                 "plr_increase_percent": 15.0,
             }
         )
-        second = make_task("second", release_time=1.0, scenario="RAIN")
+        second = make_task("second", scenario="RAIN")
         env = VECOffloadingEnv(
             [first, second],
-            {
-                (0.0, "vehicle-1"): make_vehicle(scenario="RAIN"),
-                (1.0, "vehicle-1"): make_vehicle(
-                    time=1.0,
-                    scenario="RAIN",
-                ),
-            },
+            {(0.0, "vehicle-1"): make_vehicle(scenario="RAIN")},
         )
 
         observation, _ = env.reset(seed=7)
-        fields = {
-            name: observation[index]
-            for index, name in enumerate(env.observation_fields)
-        }
+        fields = dict(zip(env.observation_fields, observation))
         self.assertEqual(fields["weather_base"], 0.0)
         self.assertEqual(fields["weather_rain"], 1.0)
-        self.assertAlmostEqual(fields["fog_packet_loss_probability"], 0.17)
-        self.assertAlmostEqual(fields["cloud_packet_loss_probability"], 0.20)
-        self.assertEqual(fields["local_queue_occupancy"], 0.0)
-        self.assertEqual(fields["local_available_capacity"], 1.0)
+        self.assertAlmostEqual(
+            fields["fog_terminal_loss_probability"], 0.17**3
+        )
+        self.assertAlmostEqual(
+            fields["cloud_terminal_loss_probability"], 0.20**3
+        )
+        self.assertEqual(fields["local_estimated_wait"], 0.0)
+        self.assertEqual(fields["remaining_tasks"], 1.0)
 
-        next_observation = env.step(
-            np.array([-1.0], dtype=np.float32)
-        )[0]
-        next_fields = {
-            name: next_observation[index]
-            for index, name in enumerate(env.observation_fields)
-        }
-        self.assertEqual(next_fields["local_queue_occupancy"], 1.0)
-        self.assertEqual(next_fields["local_available_capacity"], 0.0)
+        next_observation = env.step(0)[0]
+        next_fields = dict(zip(env.observation_fields, next_observation))
+        self.assertGreater(next_fields["local_estimated_wait"], 0.0)
+        self.assertEqual(next_fields["remaining_tasks"], 0.5)
+        self.assertLess(next_fields["remaining_compute_demand"], 1.0)
+        self.assertLess(next_fields["remaining_data_volume"], 1.0)
 
-    def test_local_step_uses_existing_execution_model(self) -> None:
+    def test_local_step_uses_fixed_bounded_reward(self) -> None:
         task = make_task("task")
-        model = ExecutionModel(local_speedup=1.0)
         env = VECOffloadingEnv(
             [task],
             {"vehicle-1": make_vehicle()},
-            execution_model=model,
+            execution_model=ExecutionModel(local_speedup=1.0),
         )
 
         observation, reset_info = env.reset(seed=7)
-        next_observation, reward, terminated, truncated, info = env.step(
-            np.array([-1.0], dtype=np.float32)
-        )
+        next_observation, reward, terminated, truncated, info = env.step(0)
 
         self.assertTrue(env.observation_space.contains(observation))
         self.assertEqual(reset_info["task_id"], "task")
         self.assertEqual(info["target"], "LOCAL")
         self.assertEqual(info["latency"], task.exec_time)
-        self.assertEqual(
-            info["total_system_energy"],
-            task.power * task.exec_time,
-        )
-        self.assertLess(reward, 0.0)
+        self.assertEqual(info["total_system_energy"], task.power * task.exec_time)
+        self.assertAlmostEqual(reward, -0.1625)
+        self.assertGreaterEqual(reward, -1.0)
+        self.assertLessEqual(reward, 0.0)
+        self.assertEqual(info["reward_profile"], "fixed_bounded")
+        self.assertEqual(info["loss_weight"], 0.50)
+        self.assertEqual(info["latency_weight"], 0.35)
+        self.assertEqual(info["energy_weight"], 0.15)
         self.assertTrue(terminated)
         self.assertFalse(truncated)
         np.testing.assert_array_equal(
@@ -139,101 +123,20 @@ class VECOffloadingEnvTests(unittest.TestCase):
         )
 
     def test_cloud_step_uses_weather_aware_dynamic_backhaul(self) -> None:
-        base_task = make_task("base", scenario="BASE")
-        fog_task = make_task("fog", scenario="FOG")
         base_env = VECOffloadingEnv(
-            [base_task],
+            [make_task("base", scenario="BASE")],
             {"vehicle-1": make_vehicle()},
         )
         fog_env = VECOffloadingEnv(
-            [fog_task],
+            [make_task("fog", scenario="FOG")],
             {"vehicle-1": make_vehicle(scenario="FOG")},
         )
-
         base_env.reset(seed=11)
         fog_env.reset(seed=11)
-        _, _, _, _, base_info = base_env.step(
-            np.array([1.0], dtype=np.float32)
-        )
-        _, _, _, _, fog_info = fog_env.step(
-            np.array([1.0], dtype=np.float32)
-        )
+        base_info = base_env.step(2)[4]
+        fog_info = fog_env.step(2)[4]
 
-        self.assertGreater(
-            fog_info["backhaul_delay"],
-            base_info["backhaul_delay"],
-        )
-
-    def test_adaptive_reward_selects_weather_profile(self) -> None:
-        task = make_task("rain", scenario="RAIN")
-        env = VECOffloadingEnv(
-            [task],
-            {"vehicle-1": make_vehicle(scenario="RAIN")},
-            reward_config=RewardConfig.adaptive_default(),
-        )
-
-        env.reset(seed=11)
-        _, _, _, _, info = env.step(
-            np.array([-1.0], dtype=np.float32)
-        )
-
-        self.assertEqual(info["reward_profile"], "weather_adaptive")
-        self.assertEqual(info["latency_weight"], 0.40)
-        self.assertEqual(info["energy_weight"], 0.20)
-        self.assertEqual(info["reliability_weight"], 0.25)
-        self.assertEqual(info["deadline_miss_penalty"], 6.0)
-
-    def test_custom_weather_profile_overrides_default(self) -> None:
-        custom = RewardProfile(
-            latency_weight=0.8,
-            energy_weight=0.1,
-            reliability_weight=0.1,
-            packet_loss_penalty=4.0,
-            deadline_miss_penalty=9.0,
-        )
-        config = RewardConfig(
-            name="custom",
-            weather_profiles={"SNOW": custom},
-        )
-
-        self.assertIs(config.for_weather("SNOW"), custom)
-        self.assertEqual(
-            config.for_weather("BASE"),
-            config.default,
-        )
-
-    def test_fixed_and_adaptive_comparison_replays_same_trajectory(self) -> None:
-        tasks = [
-            make_task("base", release_time=0.0, scenario="BASE"),
-            make_task("rain", release_time=1.0, scenario="RAIN"),
-        ]
-        states = {
-            (0.0, "vehicle-1"): make_vehicle(
-                time=0.0,
-                scenario="BASE",
-            ),
-            (1.0, "vehicle-1"): make_vehicle(
-                time=1.0,
-                scenario="RAIN",
-            ),
-        }
-
-        rows = compare_fixed_and_adaptive(
-            tasks,
-            states,
-            actions=[-1.0, -1.0],
-            seed=17,
-        )
-        by_key = {(row.mode, row.scenario): row for row in rows}
-        fixed = by_key[("fixed", "ALL")]
-        adaptive = by_key[("weather_adaptive", "ALL")]
-
-        self.assertEqual(fixed.task_count, adaptive.task_count)
-        self.assertEqual(fixed.average_latency, adaptive.average_latency)
-        self.assertEqual(fixed.average_energy, adaptive.average_energy)
-        self.assertEqual(fixed.deadline_misses, adaptive.deadline_misses)
-        self.assertEqual(fixed.packet_losses, adaptive.packet_losses)
-        self.assertNotEqual(fixed.average_reward, adaptive.average_reward)
+        self.assertGreater(fog_info["backhaul_delay"], base_info["backhaul_delay"])
 
     def test_reset_seed_reproduces_packet_outcome(self) -> None:
         task = TaskRecord(
@@ -242,24 +145,21 @@ class VECOffloadingEnvTests(unittest.TestCase):
                 "plr_increase_percent": 45.0,
             }
         )
-        env = VECOffloadingEnv(
-            [task],
-            {"vehicle-1": make_vehicle()},
-        )
+        env = VECOffloadingEnv([task], {"vehicle-1": make_vehicle()})
 
         env.reset(seed=123)
-        self.assertEqual(env._channel.seed, 123)
-        first = env.step(np.array([0.0], dtype=np.float32))[4]
+        first = env.step(1)[4]
         env.reset(seed=123)
-        second = env.step(np.array([0.0], dtype=np.float32))[4]
+        second = env.step(1)[4]
 
         self.assertEqual(first["packet_lost"], second["packet_lost"])
         self.assertEqual(
-            first["transmission_attempts"],
-            second["transmission_attempts"],
+            first["transmission_attempts"], second["transmission_attempts"]
         )
-        self.assertIn("final_failure_probability", first)
-        self.assertIn("transmission_energy", first)
+
+    def test_reward_config_rejects_invalid_weights(self) -> None:
+        with self.assertRaisesRegex(ValueError, "sum to 1"):
+            RewardConfig(loss_weight=0.5, latency_weight=0.5, energy_weight=0.5)
 
     def test_environment_passes_gymnasium_checker(self) -> None:
         tasks = [
@@ -270,13 +170,7 @@ class VECOffloadingEnvTests(unittest.TestCase):
             (0.0, "vehicle-1"): make_vehicle(time=0.0),
             (1.0, "vehicle-1"): make_vehicle(time=1.0),
         }
-        env = VECOffloadingEnv(
-            tasks,
-            states,
-            reward_config=RewardConfig(),
-        )
-
-        check_env(env, skip_render_check=True)
+        check_env(VECOffloadingEnv(tasks, states), skip_render_check=True)
 
     def test_missing_vehicle_state_is_rejected(self) -> None:
         with self.assertRaisesRegex(KeyError, "No vehicle state"):

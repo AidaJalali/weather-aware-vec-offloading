@@ -1,0 +1,13 @@
+{
+  "data_size": 1.49,
+  "cycles_per_bit": 3.2,
+  "execution_time": 7.95,
+  "deadline_budget": 24.0,
+  "task_power": 3.47,
+  "fog_distance": 1079.916399032814,
+  "network_load": 27.0,
+  "queue_wait": 48.0,
+  "remaining_tasks": 27.0,
+  "remaining_compute": 88.28999999999999,
+  "remaining_data": 23.732500000000005
+}

@@ -14,6 +14,7 @@ from infrastructure import (
     TaskRecord,
     load_tasks,
     load_vehicle_states,
+    mobile_fog_nodes_by_time,
 )
 from offloading_simulator import (
     AssignmentResult,
@@ -315,6 +316,7 @@ def run_genetic_split(
 
     for dataset_index, dataset in enumerate(datasets, start=1):
         vehicle_states = load_vehicle_states(dataset.vehicles_file)
+        fog_nodes_by_time = mobile_fog_nodes_by_time(vehicle_states)
         tasks = load_tasks(dataset.tasks_file)
         network_load_by_time = Counter(task.release_time for task in tasks)
         resource_state = ResourceState()
@@ -335,6 +337,7 @@ def run_genetic_split(
                 resource_state=resource_state,
                 channel_randomness=channel,
                 network_load_by_time=network_load_by_time,
+                fog_nodes_by_time=fog_nodes_by_time,
             )
             simulated = simulate_assignments(
                 batch,
@@ -345,6 +348,7 @@ def run_genetic_split(
                 model=model,
                 capacities=config.resource_capacities,
                 network_load_by_time=network_load_by_time,
+                fog_nodes_by_time=fog_nodes_by_time,
             )
             processed_tasks += len(batch)
             all_rows.extend(

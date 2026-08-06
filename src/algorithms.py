@@ -14,6 +14,7 @@ from infrastructure import (
 )
 from offloading_simulator import (
     DeterministicChannel,
+    FogLookup,
     ResourceCapacities,
     ResourceState,
     simulate_assignments,
@@ -143,9 +144,9 @@ Chromosome = tuple[OffloadTarget, ...]
 class GeneticBatchOffloader:
     """Weather-aware, deadline-constrained GA for a batch of VEC tasks.
 
-    Weather awareness comes from each TaskRecord's already adjusted execution time,
-    deadline, path-loss increase, and PLR increase. Chromosomes are evaluated with
-    shared execution queues so assignments account for resource contention.
+    Weather awareness comes from each TaskRecord's adjusted execution time,
+    deadline, and packet-loss-rate increase. Chromosomes are evaluated with shared
+    execution queues so assignments account for resource contention.
     """
 
     name = "GeneticBatch"
@@ -169,6 +170,7 @@ class GeneticBatchOffloader:
         resource_state: ResourceState | None = None,
         channel_randomness: DeterministicChannel | None = None,
         network_load_by_time: Mapping[float, int] | None = None,
+        fog_nodes_by_time: FogLookup | None = None,
     ) -> BatchEvaluation:
         if len(chromosome) != len(tasks):
             raise ValueError("chromosome length must equal task count")
@@ -182,6 +184,7 @@ class GeneticBatchOffloader:
             model=self.model,
             capacities=self.config.resource_capacities,
             network_load_by_time=network_load_by_time,
+            fog_nodes_by_time=fog_nodes_by_time,
         )
 
         total_latency = 0.0
@@ -253,6 +256,7 @@ class GeneticBatchOffloader:
         resource_state: ResourceState,
         channel_randomness: DeterministicChannel,
         network_load_by_time: Mapping[float, int] | None,
+        fog_nodes_by_time: FogLookup | None,
     ) -> list[Chromosome]:
         population = [
             tuple([target] * task_count)
@@ -270,6 +274,7 @@ class GeneticBatchOffloader:
                         resource_state=resource_state,
                         channel_randomness=channel_randomness,
                         network_load_by_time=network_load_by_time,
+                        fog_nodes_by_time=fog_nodes_by_time,
                     ).ranking_key,
                     target,
                 )
@@ -331,6 +336,7 @@ class GeneticBatchOffloader:
         resource_state: ResourceState | None = None,
         channel_randomness: DeterministicChannel | None = None,
         network_load_by_time: Mapping[float, int] | None = None,
+        fog_nodes_by_time: FogLookup | None = None,
     ) -> GeneticOffloadingResult:
         start = time.perf_counter()
         if not tasks:
@@ -364,6 +370,7 @@ class GeneticBatchOffloader:
             current_state,
             channel,
             network_load_by_time,
+            fog_nodes_by_time,
         )
         evaluations = 0
         generations = 0
@@ -382,6 +389,7 @@ class GeneticBatchOffloader:
                     resource_state=current_state,
                     channel_randomness=channel,
                     network_load_by_time=network_load_by_time,
+                    fog_nodes_by_time=fog_nodes_by_time,
                 )
                 evaluations += 1
             return cache[chromosome].ranking_key
@@ -506,6 +514,7 @@ class RLGeneticFallbackController:
         resource_state: ResourceState | None = None,
         channel_randomness: DeterministicChannel | None = None,
         network_load_by_time: Mapping[float, int] | None = None,
+        fog_nodes_by_time: FogLookup | None = None,
     ) -> tuple[OffloadTarget, ...]:
         if self.in_fallback:
             result = self.genetic_offloader.optimize(
@@ -514,6 +523,7 @@ class RLGeneticFallbackController:
                 resource_state=resource_state,
                 channel_randomness=channel_randomness,
                 network_load_by_time=network_load_by_time,
+                fog_nodes_by_time=fog_nodes_by_time,
             )
             self.last_ga_result = result
             self.last_source = "GA"
